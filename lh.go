@@ -545,6 +545,39 @@ func forwardCommand(lexHubDir string, args []string) {
 	}
 }
 
+func cleanOldTermuxBashrc() {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return
+	}
+	bashrc := filepath.Join(home, ".bashrc")
+	content, err := os.ReadFile(bashrc)
+	if err != nil {
+		return
+	}
+	lines := strings.Split(string(content), "\n")
+	var newLines []string
+	skip := false
+	found := false
+	for _, line := range lines {
+		if strings.TrimSpace(line) == "# === LexHub AutoStart BEGIN ===" {
+			skip = true
+			found = true
+			continue
+		}
+		if skip && strings.TrimSpace(line) == "# === LexHub AutoStart END ===" {
+			skip = false
+			continue
+		}
+		if !skip {
+			newLines = append(newLines, line)
+		}
+	}
+	if found {
+		os.WriteFile(bashrc, []byte(strings.Join(newLines, "\n")), 0644)
+	}
+}
+
 func enableAutostart(lexHubDir string) {
 	goos := runtime.GOOS
 	isTermux := os.Getenv("TERMUX_VERSION") != "" || strings.Contains(os.Getenv("PREFIX"), "com.termux")
@@ -555,30 +588,36 @@ func enableAutostart(lexHubDir string) {
 	}
 
 	if isTermux {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			printError("Failed to get home directory: %v", err)
-			return
-		}
-		bashrc := filepath.Join(home, ".bashrc")
+		cleanOldTermuxBashrc()
 		
-		if content, err := os.ReadFile(bashrc); err == nil {
-			if strings.Contains(string(content), "=== LexHub AutoStart BEGIN ===") {
-				printSuccess("开机自启（随 Termux 启动）已经配置过了。")
-				return
-			}
+		if _, err := exec.LookPath("sv"); err != nil {
+			printInfo("正在为您自动安装 termux-services...")
+			runCmd("", "pkg", "install", "-y", "termux-services")
+		}
+
+		prefix := os.Getenv("PREFIX")
+		if prefix == "" {
+			prefix = "/data/data/com.termux/files/usr"
 		}
 		
-		block := fmt.Sprintf("\n# === LexHub AutoStart BEGIN ===\nif [ -x \"%s\" ]; then\n    \"%s\" start >/dev/null 2>&1\nfi\n# === LexHub AutoStart END ===\n", execPath, execPath)
+		svcDir := filepath.Join(prefix, "var", "service", "lexhub")
+		os.MkdirAll(svcDir, 0755)
 		
-		f, err := os.OpenFile(bashrc, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-		if err != nil {
-			printError("Failed to open .bashrc: %v", err)
-			return
-		}
-		defer f.Close()
-		f.WriteString(block)
-		printSuccess("已成功配置随 Termux 启动！")
+		runScript := filepath.Join(svcDir, "run")
+		runContent := fmt.Sprintf("#!%s/bin/sh\nexec 2>&1\nexec \"%s\"\n", prefix, execPath)
+		os.WriteFile(runScript, []byte(runContent), 0755)
+		
+		logDir := filepath.Join(lexHubDir, "logs", "daemon")
+		os.MkdirAll(logDir, 0755)
+		svcLogDir := filepath.Join(svcDir, "log")
+		os.MkdirAll(svcLogDir, 0755)
+		logRunScript := filepath.Join(svcLogDir, "run")
+		logRunContent := fmt.Sprintf("#!%s/bin/sh\nexec svlogd -tt \"%s\"\n", prefix, logDir)
+		os.WriteFile(logRunScript, []byte(logRunContent), 0755)
+
+		runCmd("", "sv-enable", "lexhub")
+		
+		printSuccess("已通过 termux-services (sv) 成功配置 Android 后台原生开机自启！")
 		return
 	}
 	
@@ -656,42 +695,9 @@ func disableAutostart(lexHubDir string) {
 	isTermux := os.Getenv("TERMUX_VERSION") != "" || strings.Contains(os.Getenv("PREFIX"), "com.termux")
 
 	if isTermux {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return
-		}
-		bashrc := filepath.Join(home, ".bashrc")
-		content, err := os.ReadFile(bashrc)
-		if err != nil {
-			printWarn("未发现 Termux 自启配置 (无 .bashrc)。")
-			return
-		}
-		
-		lines := strings.Split(string(content), "\n")
-		var newLines []string
-		skip := false
-		found := false
-		for _, line := range lines {
-			if strings.TrimSpace(line) == "# === LexHub AutoStart BEGIN ===" {
-				skip = true
-				found = true
-				continue
-			}
-			if skip && strings.TrimSpace(line) == "# === LexHub AutoStart END ===" {
-				skip = false
-				continue
-			}
-			if !skip {
-				newLines = append(newLines, line)
-			}
-		}
-		
-		if found {
-			os.WriteFile(bashrc, []byte(strings.Join(newLines, "\n")), 0644)
-			printSuccess("已成功取消随 Termux 启动。")
-		} else {
-			printWarn("未发现 Termux 自启配置。")
-		}
+		cleanOldTermuxBashrc()
+		runCmd("", "sv-disable", "lexhub")
+		printSuccess("已取消 Termux (sv) 开机自启。")
 		return
 	}
 	
@@ -731,9 +737,15 @@ func checkAutostart(lexHubDir string) {
 	}
 
 	if isTermux {
-		bashrc := filepath.Join(home, ".bashrc")
-		if content, err := os.ReadFile(bashrc); err == nil {
-			if strings.Contains(string(content), "=== LexHub AutoStart BEGIN ===") {
+		prefix := os.Getenv("PREFIX")
+		if prefix == "" {
+			prefix = "/data/data/com.termux/files/usr"
+		}
+		serviceFile := filepath.Join(prefix, "var", "service", "lexhub", "run")
+		downFile := filepath.Join(prefix, "var", "service", "lexhub", "down")
+		
+		if _, err := os.Stat(serviceFile); err == nil {
+			if _, errDown := os.Stat(downFile); errDown != nil {
 				fmt.Println("enabled")
 				return
 			}
