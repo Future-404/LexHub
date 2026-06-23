@@ -261,13 +261,15 @@ func installOrUpdate(lexHubDir string, isUpdate bool) {
 	}
 
 	injectShellAlias(lexHubDir)
-	printSuccess("LexHub setup completed successfully!")
+	if runtime.GOOS == "windows" {
+		printSuccess("LexHub setup completed successfully!")
+	}
 }
 
 func injectShellAlias(lexHubDir string) {
 	goos := runtime.GOOS
 	if goos == "windows" {
-		printInfo("To run LexHub easily on Windows, you can add %s to your system PATH.", lexHubDir)
+		printInfo("要在 Windows 上方便地运行 LexHub，建议将 %s 目录添加到您的系统环境变量 PATH 中。", lexHubDir)
 		return
 	}
 
@@ -287,6 +289,7 @@ func injectShellAlias(lexHubDir string) {
 	}
 
 	aliasLine := fmt.Sprintf("alias lh='%s'", execPath)
+	hasInjected := false
 
 	for _, rc := range rcFiles {
 		if _, err := os.Stat(rc); err == nil {
@@ -306,11 +309,18 @@ func injectShellAlias(lexHubDir string) {
 
 			err = os.WriteFile(rc, []byte(strings.Join(newLines, "\n")), 0644)
 			if err == nil {
-				printSuccess("Added alias 'lh' to %s", rc)
+				printSuccess("已成功将快捷别名 'lh' 写入配置文件：%s", rc)
+				hasInjected = true
 			}
 		}
 	}
-	printInfo("Please run 'source ~/.bashrc' or 'source ~/.zshrc' to apply the alias immediately.")
+
+	if hasInjected {
+		fmt.Println()
+		printSuccess(colorGreen + "★ LexHub 安装并初始化完成！" + colorReset)
+		printSuccess(colorYellow + "【重要步骤】请在终端执行以下命令激活 'lh' 命令行工具：" + colorReset)
+		fmt.Printf("\n    " + colorGreen + "source ~/.bashrc" + colorReset + "  (若使用 Zsh，请执行: " + colorGreen + "source ~/.zshrc" + colorReset + ")\n\n")
+	}
 }
 
 func startDaemon(lexHubDir string) {
