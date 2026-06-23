@@ -1,12 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useTranslation } from 'react-i18next';
 import useSWR from 'swr';
 import { fetcher } from '../api/client';
 import {
   Play, Square, Download, RefreshCw, GitBranch, Archive, RotateCcw,
-  Settings, Puzzle, Shield, Zap, Bot, HardDrive, Bug, KeyRound,
+  Settings, Puzzle, KeyRound,
   Trash2, X, ChevronRight, ChevronDown, CheckCircle2, AlertCircle,
-  Loader2, Package, UploadCloud, HistoryIcon, Lock, Unlock
+  Loader2, HistoryIcon, Lock, Unlock
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { ModuleInfo } from './Dashboard';

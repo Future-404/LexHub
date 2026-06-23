@@ -11,6 +11,7 @@ interface GlobalSettings {
   networkStrategy: 'auto' | 'proxy' | 'mirror' | 'direct';
   proxyUrl?: string;
   mirrorUrl?: string;
+  storeIndexUrl?: string;
 }
 
 interface NetworkStatus {

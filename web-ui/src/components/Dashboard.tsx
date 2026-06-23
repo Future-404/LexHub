@@ -15,6 +15,9 @@ export interface ModuleInfo {
   id: string;
   status: string;
   name: string;
+  icon?: string;
+  config?: Record<string, any>;
+  env?: Record<string, any>;
 }
 
 export default function Dashboard() {
