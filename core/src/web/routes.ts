@@ -534,14 +534,41 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
         Logger.warn(`无法连接远端商店: ${networkErr}，尝试使用本地内置数据 fallback`, 'API');
       }
 
-      // Fallback for development/offline
+      // Fallback for development
       const fallbackPath = path.join(path.resolve(__dirname, '../../..'), '../lexhub-store/index.json');
       if (fs.existsSync(fallbackPath)) {
         const fallbackData = fs.readFileSync(fallbackPath, 'utf-8');
         return reply.send(JSON.parse(fallbackData));
       }
 
-      throw new Error('Remote store unreachable and no local fallback found');
+      // Production Offline Fallback
+      Logger.warn('Remote store unreachable, using bundled offline store', 'API');
+      return reply.send([
+        {
+          "id": "sillytavern",
+          "name": "SillyTavern",
+          "version": "1.12.0",
+          "author": "SillyTavern Team",
+          "description": "SillyTavern 是一款本地化的大语言模型 (LLM) 角色扮演与聊天前端，专为深度沉浸和高度自定义打造。",
+          "icon": "🎭",
+          "categories": ["AI", "Chat", "Roleplay"],
+          "platforms": ["linux", "windows", "termux"],
+          "repo_url": "https://github.com/SillyTavern/SillyTavern.git",
+          "branch": "release"
+        },
+        {
+          "id": "cloudflare",
+          "name": "Cloudflare Zero Trust",
+          "version": "1.0.0",
+          "author": "Cloudflare",
+          "description": "提供端到端的隧道穿透服务，结合 LexHub 实现无感知的内网穿透与外网反向代理。",
+          "icon": "☁️",
+          "categories": ["Network", "Proxy", "Security"],
+          "platforms": ["linux", "termux", "windows"],
+          "repo_url": "",
+          "branch": "main"
+        }
+      ]);
     } catch (err) {
       Logger.error(`获取远端商店列表失败: ${err}`, 'API');
       return reply.code(500).send({ error: String(err) });

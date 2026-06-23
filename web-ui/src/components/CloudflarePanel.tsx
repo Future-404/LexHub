@@ -1,5 +1,5 @@
 import useSWR from 'swr';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Cloud, ExternalLink, Link as LinkIcon, PowerOff, RefreshCw, Key } from 'lucide-react';
 import { api } from '../api/client';
 import { Network, Play, Save } from 'lucide-react';
@@ -19,10 +19,11 @@ export default function CloudflarePanel({ moduleId }: { moduleId: string }) {
   const { data: settingsData, mutate: mutateSettings } = useSWR('/api/system/settings');
   const [gatewayDomain, setGatewayDomain] = useState('');
   
-  // Set gateway domain initial value
-  if (settingsData && !gatewayDomain && settingsData.gatewayCookieDomain) {
-    setGatewayDomain(settingsData.gatewayCookieDomain.replace(/^\./, ''));
-  }
+  useEffect(() => {
+    if (settingsData && settingsData.gatewayCookieDomain) {
+      setGatewayDomain(settingsData.gatewayCookieDomain.replace(/^\./, ''));
+    }
+  }, [settingsData]);
 
   const handleLogin = async () => {
     setLoading(true);
