@@ -3,6 +3,7 @@ import { ModuleManager } from '../manager/module.js';
 import { ConfigManager } from '../manager/config.js';
 import { SystemManager } from '../manager/system.js';
 import { Logger } from '../manager/logger.js';
+import { MigrateManager } from '../manager/migrate.js';
 import path from 'path';
 import fs from 'fs';
 
@@ -20,6 +21,27 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
 
   fastify.get('/api/system/info', async (_req, reply) => {
     return reply.send(SystemManager.getSystemMetrics());
+  });
+
+  fastify.get('/api/system/migrate/scan', async (_req, reply) => {
+    try {
+      const res = MigrateManager.scan();
+      return reply.send(res);
+    } catch (err) {
+      Logger.error(`扫描 TAV-X 遗留数据失败: ${err}`, 'API');
+      return reply.code(500).send({ error: String(err) });
+    }
+  });
+
+  fastify.post('/api/system/migrate/execute/:id', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    try {
+      await MigrateManager.execute(id);
+      return reply.send({ success: true, message: `模块 ${id} 迁移成功` });
+    } catch (err) {
+      Logger.error(`迁移模块 ${id} 失败: ${err}`, 'API');
+      return reply.code(500).send({ error: String(err) });
+    }
   });
 
   fastify.get('/api/system/settings', async (_req, reply) => {

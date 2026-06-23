@@ -2,7 +2,7 @@ import useSWR from 'swr';
 import { useTranslation } from 'react-i18next';
 import { fetcher, api } from '../api/client';
 import { useState } from 'react';
-import { Network, Globe, RefreshCw, Zap, Shield } from 'lucide-react';
+import { Network, Globe, RefreshCw, Zap, Shield, Archive, Loader2 } from 'lucide-react';
 import { useAppStore } from '../store';
 
 interface GlobalSettings {
@@ -27,6 +27,15 @@ interface NetworkStatus {
   isScanning: boolean;
 }
 
+interface MigrationScanResult {
+  hasLegacyTavx: boolean;
+  detects: {
+    id: string;
+    oldPath: string;
+    status: 'READY' | 'MIGRATED';
+  }[];
+}
+
 const safeHostname = (url: string) => {
   try { return new URL(url).hostname; } catch { return url; }
 };
@@ -38,7 +47,9 @@ export default function SettingsView() {
   const { data: netStatus, mutate: mutateNetStatus } = useSWR<NetworkStatus>('/api/system/network', fetcher, { refreshInterval: 5000 });
   const { data: autostartStatus, mutate: mutateAutostart } = useSWR<{enabled: boolean}>('/api/system/autostart', fetcher);
   const { data: modules } = useSWR<ModuleInfo[]>('/api/modules', fetcher);
+  const { data: migrationData, mutate: mutateMigration } = useSWR<MigrationScanResult>('/api/system/migrate/scan', fetcher);
   const [saving, setSaving] = useState(false);
+  const [migratingId, setMigratingId] = useState<string | null>(null);
 
   const toggleAutostart = async (currentVal: boolean) => {
     setSaving(true);
@@ -97,6 +108,20 @@ export default function SettingsView() {
   const handleRescan = async () => {
     await fetch('/api/system/network/rescan', { method: 'POST' });
     mutateNetStatus();
+  };
+
+  const handleMigrate = async (id: string) => {
+    if (!confirm(`确定要将 ${id} 从 TAV-X 迁移到 LexHub 吗？\n该操作会自动为您拉取脚手架并复制原先的资产文件（如 data, plugins 等）。`)) return;
+    setMigratingId(id);
+    try {
+      const res = await api.executeMigrate(id);
+      alert(res.message);
+      await mutateMigration();
+    } catch (err) {
+      alert('迁移失败: ' + String(err));
+    } finally {
+      setMigratingId(null);
+    }
   };
 
   if (!settings) return null;
@@ -298,6 +323,51 @@ export default function SettingsView() {
         </div>
         
       </div>
+
+      {/* Migration Card */}
+      {migrationData?.hasLegacyTavx && (
+        <div className="glass-panel p-6 rounded-2xl border border-blue-200 dark:border-blue-900/60 bg-blue-50/30 dark:bg-blue-900/10 space-y-6">
+          <div className="flex items-center space-x-3 mb-2">
+            <div className="p-2 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg">
+              <Archive className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-lg font-medium text-blue-900 dark:text-blue-100">老用户数据迁移 (TAV-X Migration)</h2>
+              <p className="text-sm text-blue-700/80 dark:text-blue-300/80 mt-1">
+                检测到您设备上存有旧版 TAV-X 架构的遗留资产。您可以一键无缝将历史数据升级至 LexHub 环境。
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            {migrationData.detects.map(d => (
+              <div key={d.id} className="flex items-center justify-between p-4 bg-white/60 dark:bg-zinc-900/60 rounded-xl border border-blue-100 dark:border-blue-800/30">
+                <div>
+                  <div className="flex items-center space-x-2">
+                    <span className="font-medium text-zinc-900 dark:text-zinc-100">{d.id}</span>
+                    {d.status === 'MIGRATED' && (
+                      <span className="px-2 py-0.5 rounded-full bg-green-100 text-green-700 text-xs font-medium">已迁移</span>
+                    )}
+                  </div>
+                  <div className="text-xs text-zinc-500 mt-1 font-mono truncate max-w-xs sm:max-w-md">
+                    旧版路径: {d.oldPath}
+                  </div>
+                </div>
+                <button
+                  disabled={migratingId === d.id || d.status === 'MIGRATED'}
+                  onClick={() => handleMigrate(d.id)}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors flex items-center shadow-sm"
+                >
+                  {migratingId === d.id ? (
+                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> 迁移中...</>
+                  ) : d.status === 'MIGRATED' ? '已完成' : '一键迁移'}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

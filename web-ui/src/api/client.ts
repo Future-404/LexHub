@@ -19,4 +19,6 @@ export const api = {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ action })
   }).then(res => res.json()),
+  scanMigrate: () => fetch('/api/system/migrate/scan').then(res => res.json()),
+  executeMigrate: (id: string) => fetch(`/api/system/migrate/execute/${id}`, { method: 'POST' }).then(res => res.json()),
 };
