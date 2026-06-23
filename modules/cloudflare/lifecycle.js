@@ -252,3 +252,12 @@ export async function stopGatewayTunnel(ctx) {
   }
   return { ok: true };
 }
+
+export async function start(ctx) {
+  ctx.logger.info('Cloudflare 核心模块已挂载，请在详情面板中管理网络隧道。');
+  return spawn('node', ['-e', 'setInterval(() => {}, 3600000)'], { stdio: 'ignore' });
+}
+
+export async function stop(ctx) {
+  // Do nothing
+}
