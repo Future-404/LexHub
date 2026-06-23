@@ -1,0 +1,8 @@
+name = "lexhub-installer"
+main = "index.js"
+compatibility_date = "2026-06-22"
+workers_dev = true
+
+[[r2_buckets]]
+binding = "LAUNCHER_BUCKET"
+bucket_name = "lexhub-launcher"

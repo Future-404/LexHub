@@ -1,0 +1,30 @@
+# Node.js
+node_modules/
+dist/
+*.log
+
+# Config (user-specific)
+config/settings.json
+config/installed.json
+logs/
+
+# Build
+web-ui/dist/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Compiled launcher binaries
+lh
+lh.exe
+lh-*
+
+# Dynamic module app directories
+modules/*/app/
+

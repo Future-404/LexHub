@@ -1,0 +1,11 @@
+export const fetcher = (url: string) => fetch(url).then(res => {
+  if (!res.ok) throw new Error('API Error');
+  return res.json();
+});
+
+export const api = {
+  install: (id: string) => fetch(`/api/modules/${id}/install`, { method: 'POST' }),
+  start: (id: string) => fetch(`/api/modules/${id}/start`, { method: 'POST' }),
+  stop: (id: string) => fetch(`/api/modules/${id}/stop`, { method: 'POST' }),
+  uninstall: (id: string) => fetch(`/api/modules/${id}`, { method: 'DELETE' }),
+};

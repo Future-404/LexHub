@@ -1,0 +1,66 @@
+name: Build and Release Launcher
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Build Binaries
+        run: |
+          mkdir -p build
+          
+          # Linux AMD64
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o build/lh-linux-amd64 .
+          
+          # Linux ARM64 (Termux compatible)
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o build/lh-linux-arm64 .
+          
+          # macOS AMD64
+          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o build/lh-darwin-amd64 .
+          
+          # macOS ARM64
+          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -o build/lh-darwin-arm64 .
+          
+          # Windows AMD64
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o build/lh-windows-amd64.exe .
+          
+          # Windows 386
+          CGO_ENABLED=0 GOOS=windows GOARCH=386 go build -ldflags="-s -w" -o build/lh-windows-386.exe .
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            build/lh-linux-amd64
+            build/lh-linux-arm64
+            build/lh-darwin-amd64
+            build/lh-darwin-arm64
+            build/lh-windows-amd64.exe
+            build/lh-windows-386.exe
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Sync Binaries to Cloudflare R2
+        run: |
+          aws s3 cp build/ s3://${{ secrets.R2_BUCKET_NAME }}/ --recursive --endpoint-url https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto

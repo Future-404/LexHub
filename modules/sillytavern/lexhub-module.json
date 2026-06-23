@@ -1,0 +1,80 @@
+{
+  "id": "sillytavern",
+  "name": "SillyTavern",
+  "version": "1.12.0",
+  "author": "SillyTavern Team",
+  "description": "SillyTavern 是一个可以安装在你电脑上（以及 Android 手机）的用户界面，允许你与文本生成 AI 进行互动，并与你或社区创建的角色进行聊天或角色扮演。",
+  "icon": "🎭",
+  "categories": ["AI", "Chat", "Roleplay"],
+  "platforms": ["linux", "windows", "termux"],
+  "repo_url": "https://github.com/SillyTavern/SillyTavern.git",
+  "branch": "release",
+  "dependencies": {
+    "binaries": ["node", "npm", "git"]
+  },
+  "env": {
+    "PORT": { "default": 8000, "description": "监听端口" },
+    "LISTEN": { "default": "0.0.0.0", "description": "监听地址 (0.0.0.0=公网, 127.0.0.1=仅本机)" },
+    "NODE_MEMORY": { "default": 0, "description": "Node.js 内存限制 MB (0=自动, 建议 4096)" }
+  },
+  "app_config_schema": {
+    "network": {
+      "label": "网络与安全",
+      "icon": "🌐",
+      "fields": [
+        { "key": "port", "label": "服务端口", "type": "int", "default": 8000 },
+        { "key": "listen", "label": "允许外部访问 (0.0.0.0)", "type": "bool", "default": false },
+        { "key": "whitelistMode", "label": "白名单模式", "type": "bool", "default": true },
+        { "key": "basicAuthMode", "label": "基础身份验证", "type": "bool", "default": false },
+        { "key": "enableUserAccounts", "label": "多用户账号系统", "type": "bool", "default": false },
+        { "key": "enableDiscreetLogin", "label": "隐私登录模式", "type": "bool", "default": false },
+        { "key": "enableCorsProxy", "label": "CORS 代理", "type": "bool", "default": false },
+        { "key": "ssl.enabled", "label": "HTTPS (SSL)", "type": "bool", "default": false }
+      ]
+    },
+    "performance": {
+      "label": "性能与插件",
+      "icon": "⚡",
+      "fields": [
+        { "key": "performance.lazyLoadCharacters", "label": "延迟加载角色卡", "type": "bool", "default": false },
+        { "key": "performance.useDiskCache", "label": "磁盘缓存", "type": "bool", "default": false },
+        { "key": "extensions.enabled", "label": "启用前端扩展", "type": "bool", "default": true },
+        { "key": "enableServerPlugins", "label": "启用服务器插件", "type": "bool", "default": true },
+        { "key": "thumbnails.enabled", "label": "生成缩略图", "type": "bool", "default": true }
+      ]
+    },
+    "ai": {
+      "label": "AI 模型与 API",
+      "icon": "🤖",
+      "fields": [
+        { "key": "claude.enableSystemPromptCache", "label": "Claude 提示词缓存", "type": "bool", "default": false },
+        { "key": "claude.cachingAtDepth", "label": "Claude 缓存深度 (-1=关闭)", "type": "int", "default": -1 },
+        { "key": "claude.extendedTTL", "label": "Claude 延长缓存 TTL (1小时)", "type": "bool", "default": false },
+        { "key": "mistral.enablePrefix", "label": "Mistral 消息预填充", "type": "bool", "default": false },
+        { "key": "openai.randomizeUserId", "label": "OpenAI 随机用户 ID", "type": "bool", "default": false },
+        { "key": "gemini.apiVersion", "label": "Gemini API 版本", "type": "select", "options": ["v1beta", "v1alpha"], "default": "v1beta" }
+      ]
+    },
+    "backup": {
+      "label": "自动备份",
+      "icon": "💾",
+      "fields": [
+        { "key": "backups.chat.enabled", "label": "聊天自动备份", "type": "bool", "default": true },
+        { "key": "backups.common.numberOfBackups", "label": "每个文件保留备份数", "type": "int", "default": 50 },
+        { "key": "backups.chat.maxTotalBackups", "label": "总备份上限 (-1=无限)", "type": "int", "default": -1 }
+      ]
+    },
+    "debug": {
+      "label": "调试与日志",
+      "icon": "🛠",
+      "fields": [
+        { "key": "logging.enableAccessLog", "label": "记录访问日志", "type": "bool", "default": false },
+        { "key": "logging.minLogLevel", "label": "最低日志级别 (0=DEBUG)", "type": "int", "default": 1 }
+      ]
+    }
+  },
+  "port_mapping": {
+    "source": 8000,
+    "target": 8000
+  }
+}

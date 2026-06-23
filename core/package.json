@@ -1,0 +1,30 @@
+{
+  "name": "lexhub-core",
+  "version": "2.0.0",
+  "description": "LexHub Core Process Manager & Web API Server",
+  "main": "dist/index.js",
+  "bin": {
+    "lh": "dist/index.js"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@fastify/static": "^7.0.4",
+    "@fastify/websocket": "^10.0.1",
+    "commander": "^12.1.0",
+    "fastify": "^4.28.0",
+    "undici": "^8.5.0",
+    "ws": "^8.18.0",
+    "yaml": "^2.9.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.9",
+    "@types/ws": "^8.5.10",
+    "tsx": "^4.16.0",
+    "typescript": "^5.5.2"
+  }
+}
