@@ -7,6 +7,7 @@ import LogViewer from './LogViewer';
 import { ModuleInfo } from './Dashboard';
 import { cn } from '../lib/utils';
 import SillyTavernPanel from './SillyTavernPanel';
+import CloudflarePanel from './CloudflarePanel';
 
 interface ExtendedModuleInfo extends ModuleInfo {
   description?: string;
@@ -245,12 +246,34 @@ export default function Modules() {
       )}
 
       {activeDetailId && displayModules.find(m => m.id === activeDetailId) && (
-        <SillyTavernPanel
-          module={displayModules.find(m => m.id === activeDetailId)!}
-          onClose={() => setActiveDetailId(null)}
-          onAction={async (id, action) => { await handleAction(id, action as 'start' | 'stop' | 'install' | 'uninstall'); }}
-          loadingAction={loadingAction}
-        />
+        activeDetailId === 'sillytavern' ? (
+          <SillyTavernPanel
+            module={displayModules.find(m => m.id === activeDetailId)!}
+            onClose={() => setActiveDetailId(null)}
+            onAction={async (id, action) => { await handleAction(id, action as 'start' | 'stop' | 'install' | 'uninstall'); }}
+            loadingAction={loadingAction}
+          />
+        ) : (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-zinc-900/40 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="w-full max-w-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800/60 rounded-2xl shadow-xl flex flex-col max-h-[90vh]">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-100 dark:border-zinc-800">
+                <h2 className="text-lg font-medium text-zinc-900 dark:text-white">
+                  {displayModules.find(m => m.id === activeDetailId)?.name || activeDetailId} 控制台
+                </h2>
+                <button onClick={() => setActiveDetailId(null)} className="p-2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 bg-zinc-100 dark:bg-zinc-800 rounded-lg">
+                  X
+                </button>
+              </div>
+              <div className="p-6 overflow-y-auto">
+                {activeDetailId === 'cloudflare' ? (
+                  <CloudflarePanel moduleId={activeDetailId} />
+                ) : (
+                  <div className="text-center text-zinc-500 py-12">此模块暂无专属高级控制面板。</div>
+                )}
+              </div>
+            </div>
+          </div>
+        )
       )}
     </div>
   );

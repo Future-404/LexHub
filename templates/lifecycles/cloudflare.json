@@ -1,0 +1,10 @@
+{
+  "id": "cloudflare",
+  "name": "Cloudflare Tunnel",
+  "version": "1.0.0",
+  "author": "LexHub",
+  "description": "安全地将本地服务暴露到公网",
+  "icon": "☁️",
+  "platforms": ["termux", "linux", "windows", "macos"],
+  "categories": ["网络"]
+}
