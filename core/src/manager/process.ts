@@ -81,8 +81,15 @@ export class ProcessManager {
     const nodeBin = SystemManager.resolveBinaryName('node');
 
     // We use a small wrapper script for context injection
-    const wrapperScript = path.join(__dirname, '../runtime/starter.js');
-    const child = spawn(nodeBin, [wrapperScript, moduleDir], {
+    let wrapperScript = path.join(__dirname, '../runtime/starter.js');
+    if (!fs.existsSync(wrapperScript)) {
+      const tsWrapper = path.join(__dirname, '../runtime/starter.ts');
+      if (fs.existsSync(tsWrapper)) {
+        wrapperScript = tsWrapper;
+      }
+    }
+
+    const child = spawn(nodeBin, [...process.execArgv, wrapperScript, moduleDir], {
       env: {
         ...process.env,
         LEXHUB_MODULE_ID: moduleId,
