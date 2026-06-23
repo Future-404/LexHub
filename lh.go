@@ -61,6 +61,10 @@ func getLexHubDir() string {
 	return filepath.Join(home, ".lexhub")
 }
 
+func isTermux() bool {
+	return os.Getenv("TERMUX_VERSION") != "" || strings.Contains(os.Getenv("PREFIX"), "com.termux")
+}
+
 func runCmd(dir string, name string, args ...string) error {
 	cmd := exec.Command(name, args...)
 	cmd.Dir = dir
@@ -83,9 +87,8 @@ func checkDependencies() {
 
 func installSystemDependencies() {
 	goos := runtime.GOOS
-	isTermux := os.Getenv("TERMUX_VERSION") != "" || os.Getenv("PREFIX") != ""
 
-	if isTermux {
+	if isTermux() {
 		printInfo("Termux detected. Installing git and nodejs...")
 		runCmd("", "pkg", "update", "-y")
 		runCmd("", "pkg", "install", "git", "nodejs", "-y")
@@ -580,14 +583,13 @@ func cleanOldTermuxBashrc() {
 
 func enableAutostart(lexHubDir string) {
 	goos := runtime.GOOS
-	isTermux := os.Getenv("TERMUX_VERSION") != "" || strings.Contains(os.Getenv("PREFIX"), "com.termux")
 	
 	execPath, err := os.Executable()
 	if err != nil {
 		execPath = filepath.Join(lexHubDir, "lh")
 	}
 
-	if isTermux {
+	if isTermux() {
 		cleanOldTermuxBashrc()
 		
 		if _, err := exec.LookPath("sv"); err != nil {
@@ -692,9 +694,8 @@ WantedBy=default.target
 
 func disableAutostart(lexHubDir string) {
 	goos := runtime.GOOS
-	isTermux := os.Getenv("TERMUX_VERSION") != "" || strings.Contains(os.Getenv("PREFIX"), "com.termux")
 
-	if isTermux {
+	if isTermux() {
 		cleanOldTermuxBashrc()
 		runCmd("", "sv-disable", "lexhub")
 		printSuccess("已取消 Termux (sv) 开机自启。")
@@ -728,7 +729,6 @@ func disableAutostart(lexHubDir string) {
 
 func checkAutostart(lexHubDir string) {
 	goos := runtime.GOOS
-	isTermux := os.Getenv("TERMUX_VERSION") != "" || strings.Contains(os.Getenv("PREFIX"), "com.termux")
 	
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -736,7 +736,7 @@ func checkAutostart(lexHubDir string) {
 		return
 	}
 
-	if isTermux {
+	if isTermux() {
 		prefix := os.Getenv("PREFIX")
 		if prefix == "" {
 			prefix = "/data/data/com.termux/files/usr"

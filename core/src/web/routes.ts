@@ -36,7 +36,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
     try {
       const { execSync } = require('child_process');
       const { LEXHUB_DIR } = require('../manager/config.js');
-      const lhBin = path.join(LEXHUB_DIR, process.platform === 'win32' ? 'lh.exe' : 'lh');
+      const lhBin = path.join(LEXHUB_DIR, SystemManager.getPlatform() === 'windows' ? 'lh.exe' : 'lh');
       const out = execSync(`"${lhBin}" autostart-status`, { encoding: 'utf8' }).trim();
       return reply.send({ enabled: out === 'enabled' });
     } catch (err) {
@@ -49,12 +49,12 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
     try {
       const { execSync } = require('child_process');
       const { LEXHUB_DIR } = require('../manager/config.js');
-      const lhBin = path.join(LEXHUB_DIR, process.platform === 'win32' ? 'lh.exe' : 'lh');
+      const lhBin = path.join(LEXHUB_DIR, SystemManager.getPlatform() === 'windows' ? 'lh.exe' : 'lh');
       
       if (enabled) {
         execSync(`"${lhBin}" enable`, { stdio: 'ignore' });
         let warning = '';
-        if (process.platform === 'android' || process.env.PREFIX?.includes('com.termux')) {
+        if (SystemManager.getPlatform() === 'termux') {
            warning = '如果您是首次开启开机自启功能，请注意：\n您必须【彻底退出并重启 Termux App】（例如输入 exit 强制结束会话），守护进程底座 (termux-services) 才能正式接管系统！';
         }
         return reply.send({ enabled, warning });
@@ -397,10 +397,11 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
         await execAsync('pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple');
         return reply.send({ message: 'PIP 源已切换至清华大学镜像' });
       } else if (action === 'system') {
-        if (process.platform === 'android' || process.env.PREFIX?.includes('com.termux')) {
+        const platform = SystemManager.getPlatform();
+        if (platform === 'termux') {
           await execAsync(`sed -i 's@packages.termux.org@mirrors.tuna.tsinghua.edu.cn/termux@g' $PREFIX/etc/apt/sources.list`);
           return reply.send({ message: 'Termux 系统源已成功切换至清华大学镜像' });
-        } else if (process.platform === 'linux') {
+        } else if (platform === 'linux') {
           return reply.send({ message: 'Linux 请在终端执行: bash <(curl -sSL https://linuxmirrors.cn/main.sh)' });
         } else {
           return reply.send({ message: '当前系统无需更换系统源' });
