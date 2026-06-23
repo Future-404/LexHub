@@ -9,14 +9,14 @@ export default function AuthScreen({ onAuthenticated }: { onAuthenticated: () =>
   const [error, setError] = useState('');
 
   useEffect(() => {
-    fetch('/api/auth/status')
+    fetch('/api/auth/status', { cache: 'no-store' })
       .then(res => res.json())
       .then(data => {
         if (data.needSetup) {
           setMode('setup');
         } else {
           // Check if we are already logged in
-          fetch('/api/system/info')
+          fetch('/api/system/info', { cache: 'no-store' })
             .then(res => {
               if (res.status === 401) {
                 setMode('login');

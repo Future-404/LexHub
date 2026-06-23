@@ -21,7 +21,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       return reply;
     }
 
-    if (req.url.startsWith('/api/') && !req.url.startsWith('/api/auth/') && !req.url.startsWith('/api/system/info')) {
+    if (req.url.startsWith('/api/') && !req.url.startsWith('/api/auth/')) {
       const settings = ConfigManager.loadSettings();
       if (settings.adminPasswordHash) {
         try {
