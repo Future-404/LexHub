@@ -8,6 +8,7 @@ import fs from 'fs';
 import { Logger } from '../manager/logger.js';
 import { ConfigManager } from '../manager/config.js';
 import { ProcessManager, ProcessEvent } from '../manager/process.js';
+import { ModuleManager } from '../manager/module.js';
 import { registerRoutes } from './routes.js';
 import { initWebSocket } from './ws.js';
 
@@ -25,6 +26,28 @@ export async function createServer(): Promise<FastifyInstance> {
   // ── Plugins ────────────────────────────────────────────────────────────────
   await fastify.register(fastifyWebsocket);
   await fastify.register(fastifyCookie);
+  await fastify.register(require('@fastify/reply-from'));
+
+  fastify.addHook('onRequest', async (req, reply) => {
+    const host = req.headers.host;
+    if (!host) return;
+
+    const targetUrl = ModuleManager.getProxyTarget(host);
+    if (targetUrl) {
+      const settings = ConfigManager.loadSettings();
+      if (settings.adminPasswordHash) {
+        try {
+          await req.jwtVerify();
+        } catch (err) {
+          const rootDomain = settings.gatewayCookieDomain 
+            ? `https://lexhub${settings.gatewayCookieDomain}` 
+            : '/';
+          return reply.redirect(302, rootDomain); 
+        }
+      }
+      return (reply as any).from(targetUrl + req.url);
+    }
+  });
   
   // Try to load a JWT secret, generate one if none exists in a hidden file
   const secretPath = path.join(ConfigManager.loadSettings().storeIndexUrl ? path.join(__dirname, '../../../config') : '/tmp', '.jwt_secret');

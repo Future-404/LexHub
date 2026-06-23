@@ -66,6 +66,24 @@ export class ModuleManager {
   }
 
   /**
+   * Find proxy target by host
+   */
+  static getProxyTarget(host: string): string | null {
+    // Strip port if exists in host
+    const pureHost = host.split(':')[0];
+    const installed = ConfigManager.getAllInstalledModules();
+    
+    for (const mod of installed) {
+      const pubHost = mod.config?.publicHost as string;
+      const pubPort = mod.config?.publicPort as number;
+      if (pubHost && pureHost === pubHost && pubPort) {
+        return `http://127.0.0.1:${pubPort}`;
+      }
+    }
+    return null;
+  }
+
+  /**
    * Scan the modules/ directory and return all valid ModuleInfo objects.
    */
   static scanInstalledModules(): ModuleInfo[] {

@@ -15,6 +15,7 @@
   "dependencies": {
     "@fastify/cookie": "^11.0.2",
     "@fastify/jwt": "^10.1.0",
+    "@fastify/reply-from": "^12.6.2",
     "@fastify/static": "^7.0.4",
     "@fastify/websocket": "^10.0.1",
     "commander": "^12.1.0",
