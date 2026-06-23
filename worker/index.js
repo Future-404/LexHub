@@ -25,7 +25,7 @@ export default {
     }
     
     // 2. If it's a browser request (non-cli), return an elegant setup guide page
-    if (!userAgent.includes('curl') && !userAgent.includes('wget')) {
+    if (!userAgent.includes('curl') && !userAgent.includes('wget') && !userAgent.includes('PowerShell') && !userAgent.includes('WindowsPowerShell')) {
       const html = `<!DOCTYPE html>
       <html lang="zh-CN">
       <head>
@@ -65,6 +65,9 @@ export default {
             color: #a1a1aa; 
             font-size: 0.95rem; 
             line-height: 1.6; 
+            text-align: left;
+            margin-bottom: 4px;
+            margin-top: 16px;
           }
           .code-block { 
             background: #18181b; 
@@ -74,22 +77,28 @@ export default {
             font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; 
             font-size: 0.9rem; 
             color: #34d399; 
-            margin: 24px 0; 
+            margin: 8px 0; 
             overflow-x: auto; 
             text-align: left; 
           }
           .hint { 
             font-size: 0.8rem; 
             color: #71717a; 
+            display: block;
+            margin-top: 24px;
           }
         </style>
       </head>
       <body>
         <div class="card">
           <h1>🎭 LexHub AI 应用管理器</h1>
-          <p>请复制下方命令并在您的终端（Linux / macOS / Termux）中执行，以开始全自动安装。</p>
+          <p>🍎 Linux / macOS / Termux 终端执行：</p>
           <div class="code-block">
             curl -s -L https://${url.host} | bash
+          </div>
+          <p>🪟 Windows (以管理员运行 PowerShell) 执行：</p>
+          <div class="code-block">
+            irm https://${url.host} | iex
           </div>
           <span class="hint">安装程序会自动获取最优镜像，并检查系统依赖环境。</span>
         </div>
@@ -97,6 +106,36 @@ export default {
       </html>`;
       return new Response(html, { headers: { 'content-type': 'text/html;charset=UTF-8' } });
     }
+
+    // 3. PowerShell loader script
+    if (userAgent.includes('PowerShell') || userAgent.includes('WindowsPowerShell')) {
+      const psScript = `# ===================================================================
+#  LexHub — PowerShell Loader Script (Powered by Cloudflare R2)
+# ===================================================================
+$ErrorActionPreference = "Stop"
+Write-Host "[LexHub Loader] 正在从边缘节点下载安装引导器..." -ForegroundColor Cyan
+
+$ARCH = $env:PROCESSOR_ARCHITECTURE.ToLower()
+if ($ARCH -eq "amd64") {
+    $GOARCH = "amd64"
+} elseif ($ARCH -eq "x86") {
+    $GOARCH = "386"
+} else {
+    Write-Host "Unsupported architecture: $ARCH" -ForegroundColor Red
+    exit 1
+}
+
+$BINARY = "lh-windows-\${GOARCH}.exe"
+$DOWNLOAD_URL = "https://${url.host}/\${BINARY}"
+
+Invoke-WebRequest -Uri $DOWNLOAD_URL -OutFile "lh.exe"
+Write-Host "[LexHub Loader] 下载完成，开始执行安装流程..." -ForegroundColor Green
+
+.\\lh.exe install
+`;
+      return new Response(psScript, { headers: { 'content-type': 'text/plain;charset=UTF-8' } });
+    }
+
     
     // 3. If it's curl/wget, return a short bash script that downloads the binary from this Worker
     const loaderScript = `#!/usr/bin/env bash

@@ -122,7 +122,20 @@ func installSystemDependencies() {
 			printWarn("Unsupported Linux distribution. Please install git and nodejs manually.")
 		}
 	case "windows":
-		printError("On Windows, please install Git and Node.js manually: \n  - Git: https://git-scm.com\n  - Node.js: https://nodejs.org")
+		printInfo("Windows detected. Checking for winget...")
+		if _, err := exec.LookPath("winget"); err == nil {
+			if _, errGit := exec.LookPath("git"); errGit != nil {
+				printInfo("Installing Git via winget...")
+				runCmd("", "winget", "install", "-e", "--id", "Git.Git", "--accept-package-agreements", "--accept-source-agreements")
+			}
+			if _, errNode := exec.LookPath("node"); errNode != nil {
+				printInfo("Installing Node.js via winget...")
+				runCmd("", "winget", "install", "-e", "--id", "OpenJS.NodeJS", "--accept-package-agreements", "--accept-source-agreements")
+			}
+			printInfo("System dependencies check complete. Note: If tools were just installed, you may need to restart your terminal later.")
+		} else {
+			printError("winget not found. Please install Git and Node.js manually: \n  - Git: https://git-scm.com\n  - Node.js: https://nodejs.org")
+		}
 	}
 }
 
@@ -269,7 +282,15 @@ func installOrUpdate(lexHubDir string, isUpdate bool) {
 func injectShellAlias(lexHubDir string) {
 	goos := runtime.GOOS
 	if goos == "windows" {
-		printInfo("要在 Windows 上方便地运行 LexHub，建议将 %s 目录添加到您的系统环境变量 PATH 中。", lexHubDir)
+		printInfo("Attempting to add LexHub to user PATH...")
+		script := fmt.Sprintf(`$p = [Environment]::GetEnvironmentVariable("PATH", "User"); if ($p -notlike "*%s*") { [Environment]::SetEnvironmentVariable("PATH", $p + ";%s", "User") }`, lexHubDir, lexHubDir)
+		err := runCmd("", "powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script)
+		if err == nil {
+			printSuccess("已将 %s 添加到系统用户 PATH 中！", lexHubDir)
+			printSuccess("【重要】请重新打开一个 PowerShell 终端，即可在任意目录直接使用 'lh' 命令！")
+		} else {
+			printWarn("自动写入 PATH 失败。要在 Windows 上方便地运行 LexHub，建议手动将 %s 目录添加到系统环境变量 PATH 中。", lexHubDir)
+		}
 		return
 	}
 
