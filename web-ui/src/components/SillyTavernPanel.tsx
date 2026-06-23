@@ -207,6 +207,13 @@ function AppConfigPanel({ moduleId }: { moduleId: string }) {
                     >
                       {field.options?.map(o => <option key={o} value={o}>{o}</option>)}
                     </select>
+                  ) : field.type === 'string' ? (
+                    <input
+                      type="text"
+                      value={String(val)}
+                      onChange={e => setVal(field.key, e.target.value)}
+                      className="w-48 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none text-right"
+                    />
                   ) : (
                     <input
                       type="number"

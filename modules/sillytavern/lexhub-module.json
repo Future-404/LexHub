@@ -19,57 +19,87 @@
   },
   "app_config_schema": {
     "network": {
-      "label": "网络与安全",
+      "label": "网络与服务 (Server)",
       "icon": "🌐",
       "fields": [
-        { "key": "port", "label": "服务端口", "type": "int", "default": 8000 },
-        { "key": "listen", "label": "允许外部访问 (0.0.0.0)", "type": "bool", "default": false },
-        { "key": "whitelistMode", "label": "白名单模式", "type": "bool", "default": true },
-        { "key": "basicAuthMode", "label": "基础身份验证", "type": "bool", "default": false },
+        { "key": "port", "label": "服务端口 (Port)", "type": "int", "default": 8000 },
+        { "key": "listen", "label": "允许外部访问 (Listen)", "type": "bool", "default": false },
+        { "key": "listenAddress.ipv4", "label": "IPv4 监听地址", "type": "string", "default": "0.0.0.0" },
+        { "key": "protocol.ipv4", "label": "启用 IPv4", "type": "bool", "default": true },
+        { "key": "protocol.ipv6", "label": "启用 IPv6", "type": "bool", "default": false },
+        { "key": "browserLaunch.enabled", "label": "启动时自动打开浏览器", "type": "bool", "default": true },
+        { "key": "ssl.enabled", "label": "启用 HTTPS (SSL)", "type": "bool", "default": false }
+      ]
+    },
+    "security": {
+      "label": "安全与认证 (Security)",
+      "icon": "🛡️",
+      "fields": [
+        { "key": "whitelistMode", "label": "启用白名单模式", "type": "bool", "default": true },
+        { "key": "enableForwardedWhitelist", "label": "白名单校验代理 IP", "type": "bool", "default": true },
+        { "key": "basicAuthMode", "label": "基础身份验证 (Basic Auth)", "type": "bool", "default": false },
+        { "key": "basicAuthUser.username", "label": "Basic Auth 用户名", "type": "string", "default": "user" },
+        { "key": "basicAuthUser.password", "label": "Basic Auth 密码", "type": "string", "default": "password" },
         { "key": "enableUserAccounts", "label": "多用户账号系统", "type": "bool", "default": false },
         { "key": "enableDiscreetLogin", "label": "隐私登录模式", "type": "bool", "default": false },
-        { "key": "enableCorsProxy", "label": "CORS 代理", "type": "bool", "default": false },
-        { "key": "ssl.enabled", "label": "HTTPS (SSL)", "type": "bool", "default": false }
+        { "key": "perUserBasicAuth", "label": "单账号独立密码", "type": "bool", "default": false },
+        { "key": "hostWhitelist.enabled", "label": "防 Host 伪造校验", "type": "bool", "default": false },
+        { "key": "privateAddressWhitelist.enabled", "label": "防御 SSRF 攻击", "type": "bool", "default": false },
+        { "key": "disableCsrfProtection", "label": "禁用 CSRF 保护 (不推荐)", "type": "bool", "default": false }
+      ]
+    },
+    "sso_proxy": {
+      "label": "代理与单点登录 (SSO)",
+      "icon": "🔑",
+      "fields": [
+        { "key": "enableCorsProxy", "label": "启用内置 CORS 代理", "type": "bool", "default": false },
+        { "key": "cors.enabled", "label": "启用 CORS", "type": "bool", "default": true },
+        { "key": "requestProxy.enabled", "label": "通过代理发送传出请求", "type": "bool", "default": false },
+        { "key": "requestProxy.url", "label": "传出请求代理 URL", "type": "string", "default": "socks5://username:password@example.com:1080" },
+        { "key": "sso.autheliaAuth", "label": "Authelia 自动登录", "type": "bool", "default": false },
+        { "key": "sso.authentikAuth", "label": "Authentik 自动登录", "type": "bool", "default": false },
+        { "key": "forwardedHeaders.xRealIp", "label": "信任 X-Real-IP", "type": "bool", "default": true },
+        { "key": "forwardedHeaders.xForwardedFor", "label": "信任 X-Forwarded-For", "type": "bool", "default": true },
+        { "key": "forwardedHeaders.cfConnectingIp", "label": "信任 CF-Connecting-IP", "type": "bool", "default": false }
       ]
     },
     "performance": {
-      "label": "性能与插件",
+      "label": "性能与扩展 (Performance)",
       "icon": "⚡",
       "fields": [
         { "key": "performance.lazyLoadCharacters", "label": "延迟加载角色卡", "type": "bool", "default": false },
-        { "key": "performance.useDiskCache", "label": "磁盘缓存", "type": "bool", "default": false },
-        { "key": "extensions.enabled", "label": "启用前端扩展", "type": "bool", "default": true },
-        { "key": "enableServerPlugins", "label": "启用服务器插件", "type": "bool", "default": true },
-        { "key": "thumbnails.enabled", "label": "生成缩略图", "type": "bool", "default": true }
+        { "key": "performance.useDiskCache", "label": "启用磁盘缓存", "type": "bool", "default": true },
+        { "key": "performance.requestCompression.enabled", "label": "启用请求 Gzip 压缩", "type": "bool", "default": false },
+        { "key": "extensions.enabled", "label": "启用 UI 扩展", "type": "bool", "default": true },
+        { "key": "extensions.autoUpdate", "label": "自动更新扩展", "type": "bool", "default": true },
+        { "key": "extensions.models.autoDownload", "label": "自动下载扩展模型", "type": "bool", "default": true },
+        { "key": "enableServerPlugins", "label": "启用服务器插件", "type": "bool", "default": false },
+        { "key": "git.backend", "label": "Git 后端模式", "type": "select", "options": ["auto", "system", "builtin"], "default": "auto" }
       ]
     },
     "ai": {
-      "label": "AI 模型与 API",
+      "label": "AI API 高级参数",
       "icon": "🤖",
       "fields": [
         { "key": "claude.enableSystemPromptCache", "label": "Claude 提示词缓存", "type": "bool", "default": false },
         { "key": "claude.cachingAtDepth", "label": "Claude 缓存深度 (-1=关闭)", "type": "int", "default": -1 },
-        { "key": "claude.extendedTTL", "label": "Claude 延长缓存 TTL (1小时)", "type": "bool", "default": false },
+        { "key": "claude.enableAdaptiveThinking", "label": "Claude 适应性思维", "type": "bool", "default": false },
         { "key": "mistral.enablePrefix", "label": "Mistral 消息预填充", "type": "bool", "default": false },
-        { "key": "openai.randomizeUserId", "label": "OpenAI 随机用户 ID", "type": "bool", "default": false },
-        { "key": "gemini.apiVersion", "label": "Gemini API 版本", "type": "select", "options": ["v1beta", "v1alpha"], "default": "v1beta" }
+        { "key": "ollama.keepAlive", "label": "Ollama 模型驻留时间(秒)", "type": "int", "default": -1 },
+        { "key": "ollama.batchSize", "label": "Ollama Batch Size (-1=默认)", "type": "int", "default": -1 },
+        { "key": "gemini.apiVersion", "label": "Gemini API 版本", "type": "select", "options": ["v1beta", "v1alpha"], "default": "v1beta" },
+        { "key": "gemini.thoughtSignatures", "label": "Gemini 思维链", "type": "bool", "default": true }
       ]
     },
-    "backup": {
-      "label": "自动备份",
+    "backup_log": {
+      "label": "备份与日志 (Backup & Log)",
       "icon": "💾",
       "fields": [
+        { "key": "backups.allowFullDataBackup", "label": "允许用户完整备份", "type": "bool", "default": true },
         { "key": "backups.chat.enabled", "label": "聊天自动备份", "type": "bool", "default": true },
         { "key": "backups.common.numberOfBackups", "label": "每个文件保留备份数", "type": "int", "default": 50 },
-        { "key": "backups.chat.maxTotalBackups", "label": "总备份上限 (-1=无限)", "type": "int", "default": -1 }
-      ]
-    },
-    "debug": {
-      "label": "调试与日志",
-      "icon": "🛠",
-      "fields": [
-        { "key": "logging.enableAccessLog", "label": "记录访问日志", "type": "bool", "default": false },
-        { "key": "logging.minLogLevel", "label": "最低日志级别 (0=DEBUG)", "type": "int", "default": 1 }
+        { "key": "logging.enableAccessLog", "label": "记录访问日志", "type": "bool", "default": true },
+        { "key": "logging.minLogLevel", "label": "最低日志级别 (0=DEBUG)", "type": "int", "default": 0 }
       ]
     }
   },
