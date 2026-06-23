@@ -32,6 +32,35 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
     return reply.send(updated);
   });
 
+  fastify.get('/api/system/autostart', async (_req, reply) => {
+    try {
+      const { execSync } = require('child_process');
+      const { LEXHUB_DIR } = require('../manager/config.js');
+      const lhBin = path.join(LEXHUB_DIR, process.platform === 'win32' ? 'lh.exe' : 'lh');
+      const out = execSync(`"${lhBin}" autostart-status`, { encoding: 'utf8' }).trim();
+      return reply.send({ enabled: out === 'enabled' });
+    } catch (err) {
+      return reply.send({ enabled: false });
+    }
+  });
+
+  fastify.post('/api/system/autostart', async (req, reply) => {
+    const { enabled } = req.body as { enabled: boolean };
+    try {
+      const { execSync } = require('child_process');
+      const { LEXHUB_DIR } = require('../manager/config.js');
+      const lhBin = path.join(LEXHUB_DIR, process.platform === 'win32' ? 'lh.exe' : 'lh');
+      if (enabled) {
+        execSync(`"${lhBin}" enable`, { stdio: 'ignore' });
+      } else {
+        execSync(`"${lhBin}" disable`, { stdio: 'ignore' });
+      }
+      return reply.send({ enabled });
+    } catch (err) {
+      return reply.code(500).send({ error: String(err) });
+    }
+  });
+
   // ── Modules list ──────────────────────────────────────────────────────────
 
   fastify.get('/api/modules', async (_req, reply) => {

@@ -8,4 +8,10 @@ export const api = {
   start: (id: string) => fetch(`/api/modules/${id}/start`, { method: 'POST' }),
   stop: (id: string) => fetch(`/api/modules/${id}/stop`, { method: 'POST' }),
   uninstall: (id: string) => fetch(`/api/modules/${id}`, { method: 'DELETE' }),
+  getAutostart: () => fetch('/api/system/autostart').then(res => res.json()),
+  setAutostart: (enabled: boolean) => fetch('/api/system/autostart', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled })
+  }),
 };

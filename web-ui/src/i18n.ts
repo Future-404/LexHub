@@ -60,7 +60,9 @@ const resources = {
         rescan: "Rescan",
         general: "General",
         language: "Language",
-        storeUrl: "Store Index URL"
+        storeUrl: "Store Index URL",
+        autostart: "Autostart",
+        autostartDesc: "Launch LexHub automatically on system boot"
       }
     }
   },
@@ -123,7 +125,9 @@ const resources = {
         rescan: "重新测速",
         general: "基础设置",
         language: "显示语言",
-        storeUrl: "模块商店源地址"
+        storeUrl: "模块商店源地址",
+        autostart: "开机自启",
+        autostartDesc: "随系统启动自动拉起 LexHub"
       }
     }
   },
@@ -186,7 +190,9 @@ const resources = {
         rescan: "重新測速",
         general: "基礎設置",
         language: "顯示語言",
-        storeUrl: "模塊商店源地址"
+        storeUrl: "模塊商店源地址",
+        autostart: "開機自啟",
+        autostartDesc: "隨系統啟動自動拉起 LexHub"
       }
     }
   }

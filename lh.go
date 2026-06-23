@@ -546,7 +546,13 @@ func forwardCommand(lexHubDir string, args []string) {
 }
 
 func enableAutostart(lexHubDir string) {
+	goos := runtime.GOOS
 	isTermux := os.Getenv("TERMUX_VERSION") != "" || strings.Contains(os.Getenv("PREFIX"), "com.termux")
+	
+	execPath, err := os.Executable()
+	if err != nil {
+		execPath = filepath.Join(lexHubDir, "lh")
+	}
 
 	if isTermux {
 		home, err := os.UserHomeDir()
@@ -563,7 +569,7 @@ func enableAutostart(lexHubDir string) {
 			}
 		}
 		
-		block := fmt.Sprintf("\n# === LexHub AutoStart BEGIN ===\nif [ -x \"%s/lh\" ]; then\n    \"%s/lh\" start >/dev/null 2>&1\nfi\n# === LexHub AutoStart END ===\n", lexHubDir, lexHubDir)
+		block := fmt.Sprintf("\n# === LexHub AutoStart BEGIN ===\nif [ -x \"%s\" ]; then\n    \"%s\" start >/dev/null 2>&1\nfi\n# === LexHub AutoStart END ===\n", execPath, execPath)
 		
 		f, err := os.OpenFile(bashrc, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 		if err != nil {
@@ -572,14 +578,81 @@ func enableAutostart(lexHubDir string) {
 		}
 		defer f.Close()
 		f.WriteString(block)
-		printSuccess("已成功配置随 Termux 启动！每次打开 Termux 时，LexHub 会自动在后台拉起。")
+		printSuccess("已成功配置随 Termux 启动！")
 		return
 	}
 	
-	printWarn("全平台的开机自启机制正在开发中，当前已支持 Android (Termux) 环境。敬请期待后续更新！")
+	home, err := os.UserHomeDir()
+	if err != nil {
+		printError("Failed to get user home: %v", err)
+		return
+	}
+
+	switch goos {
+	case "linux":
+		systemdDir := filepath.Join(home, ".config", "systemd", "user")
+		os.MkdirAll(systemdDir, 0755)
+		serviceFile := filepath.Join(systemdDir, "lexhub.service")
+		serviceContent := fmt.Sprintf(`[Unit]
+Description=LexHub Daemon
+After=network.target
+
+[Service]
+ExecStart=%s start
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=default.target
+`, execPath)
+		os.WriteFile(serviceFile, []byte(serviceContent), 0644)
+		runCmd("", "systemctl", "--user", "daemon-reload")
+		runCmd("", "systemctl", "--user", "enable", "--now", "lexhub.service")
+		runCmd("", "loginctl", "enable-linger", os.Getenv("USER"))
+		printSuccess("已通过 Systemd 成功配置 Linux 开机自启。")
+	case "darwin":
+		launchAgentsDir := filepath.Join(home, "Library", "LaunchAgents")
+		os.MkdirAll(launchAgentsDir, 0755)
+		plistFile := filepath.Join(launchAgentsDir, "com.lexhub.daemon.plist")
+		plistContent := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.lexhub.daemon</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>%s</string>
+        <string>start</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+</dict>
+</plist>`, execPath)
+		os.WriteFile(plistFile, []byte(plistContent), 0644)
+		runCmd("", "launchctl", "load", "-w", plistFile)
+		printSuccess("已通过 Launchd 成功配置 macOS 开机自启。")
+	case "windows":
+		appData := os.Getenv("APPDATA")
+		if appData == "" {
+			printError("APPDATA env not found.")
+			return
+		}
+		startupDir := filepath.Join(appData, "Microsoft", "Windows", "Start Menu", "Programs", "Startup")
+		os.MkdirAll(startupDir, 0755)
+		vbsFile := filepath.Join(startupDir, "lexhub-autostart.vbs")
+		vbsContent := fmt.Sprintf(`Set WshShell = CreateObject("WScript.Shell")` + "\n" + `WshShell.Run """%s"" start", 0, False`, execPath)
+		os.WriteFile(vbsFile, []byte(vbsContent), 0644)
+		printSuccess("已通过启动文件夹成功配置 Windows 隐藏式开机自启。")
+	default:
+		printError("Unsupported OS for native autostart: %s", goos)
+	}
 }
 
 func disableAutostart(lexHubDir string) {
+	goos := runtime.GOOS
 	isTermux := os.Getenv("TERMUX_VERSION") != "" || strings.Contains(os.Getenv("PREFIX"), "com.termux")
 
 	if isTermux {
@@ -621,7 +694,80 @@ func disableAutostart(lexHubDir string) {
 		}
 		return
 	}
-	printWarn("全平台的开机自启机制正在开发中，当前已支持 Android (Termux) 环境。")
+	
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return
+	}
+
+	switch goos {
+	case "linux":
+		runCmd("", "systemctl", "--user", "disable", "--now", "lexhub.service")
+		serviceFile := filepath.Join(home, ".config", "systemd", "user", "lexhub.service")
+		os.Remove(serviceFile)
+		runCmd("", "systemctl", "--user", "daemon-reload")
+		printSuccess("已取消 Linux 开机自启。")
+	case "darwin":
+		plistFile := filepath.Join(home, "Library", "LaunchAgents", "com.lexhub.daemon.plist")
+		runCmd("", "launchctl", "unload", "-w", plistFile)
+		os.Remove(plistFile)
+		printSuccess("已取消 macOS 开机自启。")
+	case "windows":
+		appData := os.Getenv("APPDATA")
+		vbsFile := filepath.Join(appData, "Microsoft", "Windows", "Start Menu", "Programs", "Startup", "lexhub-autostart.vbs")
+		os.Remove(vbsFile)
+		printSuccess("已取消 Windows 开机自启。")
+	}
+}
+
+func checkAutostart(lexHubDir string) {
+	goos := runtime.GOOS
+	isTermux := os.Getenv("TERMUX_VERSION") != "" || strings.Contains(os.Getenv("PREFIX"), "com.termux")
+	
+	home, err := os.UserHomeDir()
+	if err != nil {
+		fmt.Println("disabled")
+		return
+	}
+
+	if isTermux {
+		bashrc := filepath.Join(home, ".bashrc")
+		if content, err := os.ReadFile(bashrc); err == nil {
+			if strings.Contains(string(content), "=== LexHub AutoStart BEGIN ===") {
+				fmt.Println("enabled")
+				return
+			}
+		}
+		fmt.Println("disabled")
+		return
+	}
+
+	switch goos {
+	case "linux":
+		serviceFile := filepath.Join(home, ".config", "systemd", "user", "lexhub.service")
+		if _, err := os.Stat(serviceFile); err == nil {
+			fmt.Println("enabled")
+		} else {
+			fmt.Println("disabled")
+		}
+	case "darwin":
+		plistFile := filepath.Join(home, "Library", "LaunchAgents", "com.lexhub.daemon.plist")
+		if _, err := os.Stat(plistFile); err == nil {
+			fmt.Println("enabled")
+		} else {
+			fmt.Println("disabled")
+		}
+	case "windows":
+		appData := os.Getenv("APPDATA")
+		vbsFile := filepath.Join(appData, "Microsoft", "Windows", "Start Menu", "Programs", "Startup", "lexhub-autostart.vbs")
+		if _, err := os.Stat(vbsFile); err == nil {
+			fmt.Println("enabled")
+		} else {
+			fmt.Println("disabled")
+		}
+	default:
+		fmt.Println("disabled")
+	}
 }
 
 func printHelp() {
@@ -635,8 +781,9 @@ func printHelp() {
 	fmt.Println("  status | ps     查看系统与应用运行状态")
 	fmt.Println("  log             查看 LexHub 系统日志")
 	fmt.Println("  update          自动更新并编译 LexHub")
-	fmt.Println("  enable          开启开机自启 (当前支持 Termux)")
-	fmt.Println("  disable         关闭开机自启")
+	fmt.Println("  enable          开启全平台开机自启 (支持 Win/Mac/Linux/Termux)")
+	fmt.Println("  disable         关闭全平台开机自启")
+	fmt.Println("  autostart-status 查看自启状态 (供前端使用)")
 	fmt.Println("  sysinfo         查看设备与系统负载信息")
 	fmt.Println("  help            显示此帮助信息")
 	fmt.Println("\n应用管理命令 (支持缩写，例如 lh start st):")
@@ -732,6 +879,8 @@ func main() {
 		enableAutostart(lexHubDir)
 	case "disable":
 		disableAutostart(lexHubDir)
+	case "autostart-status":
+		checkAutostart(lexHubDir)
 	case "help", "-h", "--help":
 		printHelp()
 	default:

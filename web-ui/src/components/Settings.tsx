@@ -1,6 +1,6 @@
 import useSWR from 'swr';
 import { useTranslation } from 'react-i18next';
-import { fetcher } from '../api/client';
+import { fetcher, api } from '../api/client';
 import { useState } from 'react';
 import { Network, Globe, RefreshCw, Zap, Shield } from 'lucide-react';
 import { useAppStore } from '../store';
@@ -29,7 +29,18 @@ export default function SettingsView() {
   const { setLanguage } = useAppStore();
   const { data: settings, mutate: mutateSettings } = useSWR<GlobalSettings>('/api/system/settings', fetcher);
   const { data: netStatus, mutate: mutateNetStatus } = useSWR<NetworkStatus>('/api/system/network', fetcher, { refreshInterval: 5000 });
+  const { data: autostartStatus, mutate: mutateAutostart } = useSWR<{enabled: boolean}>('/api/system/autostart', fetcher);
   const [saving, setSaving] = useState(false);
+
+  const toggleAutostart = async (currentVal: boolean) => {
+    setSaving(true);
+    try {
+      await api.setAutostart(!currentVal);
+      await mutateAutostart();
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const updateSetting = async (key: string, value: any) => {
     setSaving(true);
@@ -161,6 +172,20 @@ export default function SettingsView() {
                 onChange={(e) => updateSetting('storeIndexUrl', e.target.value)}
                 className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 transition-shadow outline-none font-mono text-xs"
               />
+            </div>
+
+            <div className="flex items-center justify-between p-4 bg-zinc-50 dark:bg-zinc-900/50 rounded-xl border border-zinc-100 dark:border-zinc-800/50 mt-4">
+              <div>
+                <span className="block text-sm font-medium text-zinc-900 dark:text-zinc-100">{t('settings.autostart', '开机自启')}</span>
+                <span className="block text-xs text-zinc-500 mt-1">{t('settings.autostartDesc', '随系统启动自动拉起 LexHub')}</span>
+              </div>
+              <button
+                disabled={saving || !autostartStatus}
+                onClick={() => autostartStatus && toggleAutostart(autostartStatus.enabled)}
+                className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${autostartStatus?.enabled ? 'bg-blue-500' : 'bg-zinc-200 dark:bg-zinc-700'}`}
+              >
+                <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${autostartStatus?.enabled ? 'translate-x-5' : 'translate-x-0'}`} />
+              </button>
             </div>
           </div>
         </div>
