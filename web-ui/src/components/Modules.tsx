@@ -213,7 +213,7 @@ export default function Modules() {
                     <button onClick={() => setActiveLogId(mod.id)} className="p-2 md:p-2.5 text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 bg-zinc-100 dark:bg-zinc-800/80 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-xl transition-colors" title={t('common.logs')}>
                       <TerminalSquare className="w-4 h-4" />
                     </button>
-                    {mod.id === 'sillytavern' ? (
+                    {mod.id === 'sillytavern' || mod.id === 'cloudflare' ? (
                       <button onClick={() => setActiveDetailId(mod.id)} className="p-2 md:p-2.5 text-blue-500 hover:text-blue-600 bg-blue-50 dark:bg-blue-500/10 hover:bg-blue-100 dark:hover:bg-blue-500/20 rounded-xl transition-colors" title={t('common.manage', '管理')}>
                         <ExternalLink className="w-4 h-4" />
                       </button>
