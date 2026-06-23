@@ -2,6 +2,7 @@ import useSWR from 'swr';
 import { useState } from 'react';
 import { Cloud, ExternalLink, Link as LinkIcon, PowerOff, RefreshCw, Key } from 'lucide-react';
 import { api } from '../api/client';
+import { Network, Play, Save } from 'lucide-react';
 
 export default function CloudflarePanel({ moduleId }: { moduleId: string }) {
   const [loading, setLoading] = useState(false);
@@ -14,6 +15,14 @@ export default function CloudflarePanel({ moduleId }: { moduleId: string }) {
     moduleId === 'cloudflare' ? `/api/modules/${moduleId}/call/checkCert` : null,
     (url: string) => fetch(url, { method: 'POST' }).then(res => res.json())
   );
+
+  const { data: settingsData, mutate: mutateSettings } = useSWR('/api/system/settings');
+  const [gatewayDomain, setGatewayDomain] = useState('');
+  
+  // Set gateway domain initial value
+  if (settingsData && !gatewayDomain && settingsData.gatewayCookieDomain) {
+    setGatewayDomain(settingsData.gatewayCookieDomain.replace(/^\./, ''));
+  }
 
   const handleLogin = async () => {
     setLoading(true);
@@ -70,6 +79,36 @@ export default function CloudflarePanel({ moduleId }: { moduleId: string }) {
     try {
       await api.callMethod(moduleId, 'stopQuickTunnel');
       setQuickUrl(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSaveGatewayDomain = async () => {
+    if (!gatewayDomain) return;
+    setLoading(true);
+    try {
+      await fetch('/api/system/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gatewayCookieDomain: '.' + gatewayDomain.replace(/^\./, '') })
+      });
+      await mutateSettings();
+      alert('已保存。请确保您已将 *.' + gatewayDomain.replace(/^\./, '') + ' 解析到了 LexHub 隧道。');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleStartGateway = async () => {
+    setLoading(true);
+    try {
+      await api.callMethod(moduleId, 'createGatewayTunnel');
+      const webPort = settingsData?.webPort || 3000;
+      await api.callMethod(moduleId, 'startGatewayTunnel', { webPort });
+      alert('核心网关隧道已启动！现在各个模块即可使用前缀直达。');
+    } catch (e) {
+      alert('启动失败');
     } finally {
       setLoading(false);
     }
@@ -169,6 +208,48 @@ export default function CloudflarePanel({ moduleId }: { moduleId: string }) {
               </div>
             )}
           </div>
+        </div>
+
+        {/* Zero Trust Gateway Box */}
+        <div className="p-4 rounded-lg bg-white/60 dark:bg-zinc-900/60 border border-blue-100 dark:border-blue-800/30 md:col-span-2">
+          <h4 className="text-xs font-semibold text-zinc-500 mb-3 flex items-center">
+            <Network className="w-3.5 h-3.5 mr-1" /> 主域名与零信任网关 (Zero Trust Gateway)
+          </h4>
+          
+          <div className="flex flex-col md:flex-row gap-4 items-end">
+            <div className="flex-1 w-full">
+              <label className="block text-xs text-zinc-500 mb-1">主根域名 (Root Domain)</label>
+              <div className="flex space-x-2">
+                <input 
+                  type="text" 
+                  value={gatewayDomain}
+                  onChange={(e) => setGatewayDomain(e.target.value)}
+                  placeholder="例如: myhome.com"
+                  className="flex-1 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-blue-500"
+                />
+                <button 
+                  onClick={handleSaveGatewayDomain}
+                  disabled={loading || !gatewayDomain}
+                  className="px-4 py-1.5 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-sm rounded-lg transition-colors flex items-center"
+                >
+                  <Save className="w-3.5 h-3.5 mr-1" /> 保存
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 w-full">
+              <button 
+                onClick={handleStartGateway}
+                disabled={loading || !certStatus?.result?.exists}
+                className="w-full py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white text-sm rounded-lg transition-colors flex items-center justify-center font-medium shadow-sm"
+              >
+                <Play className="w-4 h-4 mr-1.5" /> 启动核心反代总闸隧道
+              </button>
+            </div>
+          </div>
+          <p className="text-[11px] text-zinc-500 mt-3 leading-relaxed">
+            启用此功能前，请确保您已授权，并在 Cloudflare 控制台中将一条 <code>CNAME</code> 泛解析 (例如 <code>*.{gatewayDomain || 'yourdomain.com'}</code>) 指向了该隧道。
+            启动总闸后，任何模块只需在设置中配置 <code>publicHost</code> (如 <code>tavern.{gatewayDomain || 'yourdomain.com'}</code>)，LexHub 即可自动对其进行零信任免密穿透反向代理。
+          </p>
         </div>
 
       </div>

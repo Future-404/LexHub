@@ -206,7 +206,22 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.post('/api/modules/:id/config', async (req, reply) => {
     const { id } = req.params as { id: string };
     const body = req.body as Record<string, string | number | boolean>;
+    
+    const oldMod = ModuleManager.getModuleById(id);
+    const oldHost = oldMod?.config?.publicHost;
+
     ModuleManager.updateModuleConfig(id, body);
+
+    const newHost = body.publicHost as string;
+    if (newHost && newHost !== oldHost) {
+      // Trigger cloudflare route automatically
+      ModuleManager.callLifecycle('cloudflare', 'routeDns', { hostname: newHost }).then(() => {
+        Logger.info(`自动注册了公网域名解析: ${newHost}`, 'API');
+      }).catch(err => {
+        Logger.error(`自动注册公网域名解析失败 (${newHost}): ${err}`, 'API');
+      });
+    }
+
     return reply.send({ message: '配置已更新' });
   });
 

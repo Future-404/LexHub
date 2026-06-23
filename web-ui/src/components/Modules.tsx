@@ -1,7 +1,7 @@
 import useSWR from 'swr';
 import { useTranslation } from 'react-i18next';
 import { fetcher, api } from '../api/client';
-import { Play, Square, Download, Trash2, TerminalSquare, Loader2, Cloud, HardDrive, Settings, ExternalLink } from 'lucide-react';
+import { Play, Square, Download, Trash2, TerminalSquare, Loader2, Cloud, HardDrive, Settings, ExternalLink, Globe } from 'lucide-react';
 import { useState, useMemo, useEffect } from 'react';
 import LogViewer from './LogViewer';
 import { ModuleInfo } from './Dashboard';
@@ -76,6 +76,37 @@ function ConfigModal({ module, onClose, onSaved }: { module: ExtendedModuleInfo;
               </div>
             ))
           )}
+
+          <div className="mt-6 pt-4 border-t border-zinc-100 dark:border-zinc-800/60">
+            <h4 className="text-sm font-semibold flex items-center mb-3">
+              <Globe className="w-4 h-4 mr-1.5 text-blue-500" /> 零信任公网访问 (Zero Trust Proxy)
+            </h4>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-zinc-500 mb-1">外网域名 (publicHost)</label>
+                <input 
+                  type="text" 
+                  value={config.publicHost || ''} 
+                  onChange={e => setConfig({...config, publicHost: e.target.value})} 
+                  placeholder="例如: tavern.myhome.com" 
+                  className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 transition-shadow outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-zinc-500 mb-1">本地端口 (publicPort)</label>
+                <input 
+                  type="number" 
+                  value={config.publicPort || ''} 
+                  onChange={e => setConfig({...config, publicPort: Number(e.target.value)})} 
+                  placeholder="8000" 
+                  className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 transition-shadow outline-none"
+                />
+              </div>
+            </div>
+            <p className="text-[11px] text-zinc-500 mt-2 leading-tight">
+              提示: 设置了外网域名并保存后，LexHub 将自动尝试注册 Cloudflare DNS 路由，并通过总闸隧道转发流量，全程享有网关的防爆破保护。
+            </p>
+          </div>
         </div>
         <div className="px-6 py-4 bg-zinc-50 dark:bg-zinc-900/50 border-t border-zinc-100 dark:border-zinc-800/60 flex justify-end space-x-3">
           <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors">
