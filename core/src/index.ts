@@ -25,6 +25,17 @@ async function bootstrap(): Promise<void> {
   // 3. No arguments: default to launching the web server
   const settings = ConfigManager.loadSettings();
   Logger.info(`启动 Web 管理面板 (端口: ${settings.webPort})...`, 'Bootstrap');
+
+  if (settings.autoStartModules && settings.autoStartModules.length > 0) {
+    const { ModuleManager } = await import('./manager/module.js');
+    Logger.info(`正在拉起自启模块: ${settings.autoStartModules.join(', ')}`, 'Bootstrap');
+    for (const modId of settings.autoStartModules) {
+      ModuleManager.startModule(modId).catch(err => {
+        Logger.error(`自启模块 ${modId} 失败: ${err}`, 'Bootstrap');
+      });
+    }
+  }
+
   await startServer();
 }
 

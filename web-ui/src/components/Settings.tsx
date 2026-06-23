@@ -12,6 +12,13 @@ interface GlobalSettings {
   proxyUrl?: string;
   mirrorUrl?: string;
   storeIndexUrl?: string;
+  autoStartModules: string[];
+}
+
+interface ModuleInfo {
+  id: string;
+  status: string;
+  name: string;
 }
 
 interface NetworkStatus {
@@ -30,6 +37,7 @@ export default function SettingsView() {
   const { data: settings, mutate: mutateSettings } = useSWR<GlobalSettings>('/api/system/settings', fetcher);
   const { data: netStatus, mutate: mutateNetStatus } = useSWR<NetworkStatus>('/api/system/network', fetcher, { refreshInterval: 5000 });
   const { data: autostartStatus, mutate: mutateAutostart } = useSWR<{enabled: boolean}>('/api/system/autostart', fetcher);
+  const { data: modules } = useSWR<ModuleInfo[]>('/api/modules', fetcher);
   const [saving, setSaving] = useState(false);
 
   const toggleAutostart = async (currentVal: boolean) => {
@@ -70,6 +78,17 @@ export default function SettingsView() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const toggleModuleAutostart = async (moduleId: string) => {
+    if (!settings) return;
+    const current = settings.autoStartModules || [];
+    const enabled = current.includes(moduleId);
+    const newModules = enabled 
+      ? current.filter(id => id !== moduleId)
+      : [...current, moduleId];
+    
+    await updateSetting('autoStartModules', newModules);
   };
 
   const handleRescan = async () => {
@@ -249,6 +268,29 @@ export default function SettingsView() {
                 <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${autostartStatus?.enabled ? 'translate-x-5' : 'translate-x-0'}`} />
               </button>
             </div>
+
+            {modules && modules.length > 0 && (
+              <div className="pt-2">
+                <label className="block text-xs font-medium text-zinc-500 mb-2 pl-1">允许随后台自动启动的模块 (Autostart Modules)</label>
+                <div className="space-y-2">
+                  {modules.map(mod => {
+                    const isEnabled = (settings.autoStartModules || []).includes(mod.id);
+                    return (
+                      <div key={mod.id} className="flex items-center justify-between p-3 bg-zinc-50/50 dark:bg-zinc-900/30 rounded-lg border border-zinc-100 dark:border-zinc-800/30 transition-colors hover:border-zinc-200 dark:hover:border-zinc-700">
+                        <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{mod.name || mod.id}</span>
+                        <button
+                          disabled={saving}
+                          onClick={() => toggleModuleAutostart(mod.id)}
+                          className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${isEnabled ? 'bg-blue-500' : 'bg-zinc-200 dark:bg-zinc-700'}`}
+                        >
+                          <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${isEnabled ? 'translate-x-4' : 'translate-x-0'}`} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         </div>
         
