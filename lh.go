@@ -545,6 +545,85 @@ func forwardCommand(lexHubDir string, args []string) {
 	}
 }
 
+func enableAutostart(lexHubDir string) {
+	isTermux := os.Getenv("TERMUX_VERSION") != "" || strings.Contains(os.Getenv("PREFIX"), "com.termux")
+
+	if isTermux {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			printError("Failed to get home directory: %v", err)
+			return
+		}
+		bashrc := filepath.Join(home, ".bashrc")
+		
+		if content, err := os.ReadFile(bashrc); err == nil {
+			if strings.Contains(string(content), "=== LexHub AutoStart BEGIN ===") {
+				printSuccess("开机自启（随 Termux 启动）已经配置过了。")
+				return
+			}
+		}
+		
+		block := fmt.Sprintf("\n# === LexHub AutoStart BEGIN ===\nif [ -x \"%s/lh\" ]; then\n    \"%s/lh\" start >/dev/null 2>&1\nfi\n# === LexHub AutoStart END ===\n", lexHubDir, lexHubDir)
+		
+		f, err := os.OpenFile(bashrc, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		if err != nil {
+			printError("Failed to open .bashrc: %v", err)
+			return
+		}
+		defer f.Close()
+		f.WriteString(block)
+		printSuccess("已成功配置随 Termux 启动！每次打开 Termux 时，LexHub 会自动在后台拉起。")
+		return
+	}
+	
+	printWarn("全平台的开机自启机制正在开发中，当前已支持 Android (Termux) 环境。敬请期待后续更新！")
+}
+
+func disableAutostart(lexHubDir string) {
+	isTermux := os.Getenv("TERMUX_VERSION") != "" || strings.Contains(os.Getenv("PREFIX"), "com.termux")
+
+	if isTermux {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return
+		}
+		bashrc := filepath.Join(home, ".bashrc")
+		content, err := os.ReadFile(bashrc)
+		if err != nil {
+			printWarn("未发现 Termux 自启配置 (无 .bashrc)。")
+			return
+		}
+		
+		lines := strings.Split(string(content), "\n")
+		var newLines []string
+		skip := false
+		found := false
+		for _, line := range lines {
+			if strings.TrimSpace(line) == "# === LexHub AutoStart BEGIN ===" {
+				skip = true
+				found = true
+				continue
+			}
+			if skip && strings.TrimSpace(line) == "# === LexHub AutoStart END ===" {
+				skip = false
+				continue
+			}
+			if !skip {
+				newLines = append(newLines, line)
+			}
+		}
+		
+		if found {
+			os.WriteFile(bashrc, []byte(strings.Join(newLines, "\n")), 0644)
+			printSuccess("已成功取消随 Termux 启动。")
+		} else {
+			printWarn("未发现 Termux 自启配置。")
+		}
+		return
+	}
+	printWarn("全平台的开机自启机制正在开发中，当前已支持 Android (Termux) 环境。")
+}
+
 func printHelp() {
 	fmt.Println("LexHub AI 应用管理器 v2.0")
 	fmt.Println("\n用法:")
@@ -556,6 +635,8 @@ func printHelp() {
 	fmt.Println("  status | ps     查看系统与应用运行状态")
 	fmt.Println("  log             查看 LexHub 系统日志")
 	fmt.Println("  update          自动更新并编译 LexHub")
+	fmt.Println("  enable          开启开机自启 (当前支持 Termux)")
+	fmt.Println("  disable         关闭开机自启")
 	fmt.Println("  sysinfo         查看设备与系统负载信息")
 	fmt.Println("  help            显示此帮助信息")
 	fmt.Println("\n应用管理命令 (支持缩写，例如 lh start st):")
@@ -647,6 +728,10 @@ func main() {
 		} else {
 			installOrUpdate(lexHubDir, true)
 		}
+	case "enable":
+		enableAutostart(lexHubDir)
+	case "disable":
+		disableAutostart(lexHubDir)
 	case "help", "-h", "--help":
 		printHelp()
 	default:
