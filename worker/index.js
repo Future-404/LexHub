@@ -120,7 +120,7 @@ fi
 
 # Map OS
 if [ "$OS" = "linux" ]; then
-    if [ -n "$TERMUX_VERSION" ] || [[ "$PREFIX" == *"com.termux"* ]]; then
+    if [ -n "$TERMUX_VERSION" ] || [[ "$PREFIX" == *"com.termux"* ]] || [[ "$(uname -o 2>/dev/null)" == *"Android"* ]] || [[ "$(uname -a)" == *"Android"* ]]; then
         BINARY="lh-android-\${GOARCH}"
     else
         BINARY="lh-linux-\${GOARCH}"
