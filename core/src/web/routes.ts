@@ -6,6 +6,11 @@ import { Logger } from '../manager/logger.js';
 import { MigrateManager } from '../manager/migrate.js';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
+
+function hashPassword(password: string): string {
+  return crypto.createHash('sha256').update(password + 'lexhub_salt_v1').digest('hex');
+}
 
 export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
   // ── Global preHandler for path traversal protection ───────────────
@@ -15,6 +20,62 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       reply.code(400).send({ error: 'Invalid module ID format' });
       return reply;
     }
+
+    if (req.url.startsWith('/api/') && !req.url.startsWith('/api/auth/') && !req.url.startsWith('/api/system/info')) {
+      const settings = ConfigManager.loadSettings();
+      if (settings.adminPasswordHash) {
+        try {
+          await req.jwtVerify();
+        } catch (err) {
+          reply.code(401).send({ error: 'Unauthorized' });
+          return reply;
+        }
+      }
+    }
+  });
+
+  // ── Auth ────────────────────────────────────────────────────────────────
+
+  fastify.get('/api/auth/status', async (_req, reply) => {
+    const settings = ConfigManager.loadSettings();
+    return reply.send({ needSetup: !settings.adminPasswordHash });
+  });
+
+  fastify.post('/api/auth/setup', async (req, reply) => {
+    const { password } = req.body as { password?: string };
+    if (!password) return reply.code(400).send({ error: 'Password required' });
+    
+    const settings = ConfigManager.loadSettings();
+    if (settings.adminPasswordHash) return reply.code(403).send({ error: 'Already setup' });
+
+    ConfigManager.patchSettings({ adminPasswordHash: hashPassword(password) });
+    return reply.send({ success: true });
+  });
+
+  fastify.post('/api/auth/login', async (req, reply) => {
+    const { password } = req.body as { password?: string };
+    const settings = ConfigManager.loadSettings();
+    
+    if (!settings.adminPasswordHash) return reply.code(400).send({ error: 'Not setup' });
+
+    if (hashPassword(password || '') === settings.adminPasswordHash) {
+      const token = await reply.jwtSign({ role: 'admin' }, { expiresIn: '30d' });
+      reply.setCookie('lexhub_auth', token, {
+        domain: settings.gatewayCookieDomain || undefined,
+        path: '/',
+        httpOnly: true,
+        sameSite: 'lax',
+        maxAge: 30 * 24 * 60 * 60
+      });
+      return reply.send({ success: true });
+    }
+    return reply.code(401).send({ error: 'Invalid password' });
+  });
+
+  fastify.post('/api/auth/logout', async (_req, reply) => {
+    const settings = ConfigManager.loadSettings();
+    reply.clearCookie('lexhub_auth', { domain: settings.gatewayCookieDomain || undefined, path: '/' });
+    return reply.send({ success: true });
   });
 
   // ── System ────────────────────────────────────────────────────────────────

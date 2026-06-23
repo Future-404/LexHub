@@ -1,6 +1,8 @@
 import Fastify, { FastifyInstance } from 'fastify';
 import fastifyStatic from '@fastify/static';
 import fastifyWebsocket from '@fastify/websocket';
+import fastifyCookie from '@fastify/cookie';
+import fastifyJwt from '@fastify/jwt';
 import path from 'path';
 import fs from 'fs';
 import { Logger } from '../manager/logger.js';
@@ -22,6 +24,25 @@ export async function createServer(): Promise<FastifyInstance> {
 
   // ── Plugins ────────────────────────────────────────────────────────────────
   await fastify.register(fastifyWebsocket);
+  await fastify.register(fastifyCookie);
+  
+  // Try to load a JWT secret, generate one if none exists in a hidden file
+  const secretPath = path.join(ConfigManager.loadSettings().storeIndexUrl ? path.join(__dirname, '../../../config') : '/tmp', '.jwt_secret');
+  let jwtSecret = 'default_dev_secret';
+  if (fs.existsSync(secretPath)) {
+    jwtSecret = fs.readFileSync(secretPath, 'utf8');
+  } else {
+    jwtSecret = require('crypto').randomBytes(32).toString('hex');
+    try { fs.writeFileSync(secretPath, jwtSecret); } catch(e){}
+  }
+
+  await fastify.register(fastifyJwt, {
+    secret: jwtSecret,
+    cookie: {
+      cookieName: 'lexhub_auth',
+      signed: false
+    }
+  });
 
   // Serve web-ui dist if built, otherwise serve bundled public fallback
   const staticRoot = fs.existsSync(WEB_UI_DIST) ? WEB_UI_DIST : WEB_UI_FALLBACK;

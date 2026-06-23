@@ -23,6 +23,8 @@ export interface GlobalSettings {
   networkStrategy: 'auto' | 'proxy' | 'mirror' | 'direct';
   proxyUrl?: string;
   mirrorUrl?: string;
+  adminPasswordHash?: string;
+  gatewayCookieDomain?: string;
 }
 
 export type ModuleStatus = 'STOPPED' | 'RUNNING' | 'INSTALLING' | 'CRASHED' | 'ERROR';

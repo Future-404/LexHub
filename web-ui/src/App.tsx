@@ -127,7 +127,15 @@ function NotFound() {
 
 // ── App Router ──────────────────────────────────────────────────────────────
 
+import AuthScreen from './components/AuthScreen';
+
 export default function App() {
+  const [authenticated, setAuthenticated] = useState(false);
+
+  if (!authenticated) {
+    return <AuthScreen onAuthenticated={() => setAuthenticated(true)} />;
+  }
+
   return (
     <Layout>
       <Routes>
