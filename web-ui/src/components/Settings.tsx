@@ -43,7 +43,10 @@ export default function SettingsView() {
   const toggleAutostart = async (currentVal: boolean) => {
     setSaving(true);
     try {
-      await api.setAutostart(!currentVal);
+      const res = await api.setAutostart(!currentVal);
+      if (res.warning) {
+        alert('⚠️ 重要提示\n\n' + res.warning);
+      }
       await mutateAutostart();
     } finally {
       setSaving(false);

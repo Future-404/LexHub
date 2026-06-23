@@ -50,12 +50,18 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       const { execSync } = require('child_process');
       const { LEXHUB_DIR } = require('../manager/config.js');
       const lhBin = path.join(LEXHUB_DIR, process.platform === 'win32' ? 'lh.exe' : 'lh');
+      
       if (enabled) {
         execSync(`"${lhBin}" enable`, { stdio: 'ignore' });
+        let warning = '';
+        if (process.platform === 'android' || process.env.PREFIX?.includes('com.termux')) {
+           warning = '如果您是首次开启开机自启功能，请注意：\n您必须【彻底退出并重启 Termux App】（例如输入 exit 强制结束会话），守护进程底座 (termux-services) 才能正式接管系统！';
+        }
+        return reply.send({ enabled, warning });
       } else {
         execSync(`"${lhBin}" disable`, { stdio: 'ignore' });
+        return reply.send({ enabled });
       }
-      return reply.send({ enabled });
     } catch (err) {
       return reply.code(500).send({ error: String(err) });
     }

@@ -13,7 +13,7 @@ export const api = {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ enabled })
-  }),
+  }).then(res => res.json()),
   setMirror: (action: string) => fetch('/api/system/mirrors', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
