@@ -375,6 +375,42 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
     return reply.send(NetworkManager.getStatus());
   });
 
+  // ── Mirrors ───────────────────────────────────────────────────────────────
+
+  fastify.post('/api/system/mirrors', async (req, reply) => {
+    const { action } = req.body as { action: string };
+    const { exec } = require('child_process');
+    const { promisify } = require('util');
+    const execAsync = promisify(exec);
+
+    try {
+      if (action === 'npm') {
+        await execAsync('npm config set registry https://registry.npmmirror.com');
+        return reply.send({ message: 'NPM 源已成功切换至 npmmirror' });
+      } else if (action === 'pip') {
+        await execAsync('pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple');
+        return reply.send({ message: 'PIP 源已切换至清华大学镜像' });
+      } else if (action === 'system') {
+        if (process.platform === 'android' || process.env.PREFIX?.includes('com.termux')) {
+          await execAsync(`sed -i 's@packages.termux.org@mirrors.tuna.tsinghua.edu.cn/termux@g' $PREFIX/etc/apt/sources.list`);
+          return reply.send({ message: 'Termux 系统源已成功切换至清华大学镜像' });
+        } else if (process.platform === 'linux') {
+          return reply.send({ message: 'Linux 请在终端执行: bash <(curl -sSL https://linuxmirrors.cn/main.sh)' });
+        } else {
+          return reply.send({ message: '当前系统无需更换系统源' });
+        }
+      } else if (action === 'reset') {
+        try { await execAsync('git config --global --unset http.proxy'); } catch {}
+        try { await execAsync('git config --global --unset https.proxy'); } catch {}
+        try { await execAsync('npm config delete registry'); } catch {}
+        return reply.send({ message: '网络设置与代理缓存已重置' });
+      }
+      return reply.code(400).send({ error: '未知操作' });
+    } catch (err) {
+      return reply.code(500).send({ error: String(err) });
+    }
+  });
+
   // ── Store ─────────────────────────────────────────────────────────────────
 
   fastify.get('/api/store/modules', async (_req, reply) => {

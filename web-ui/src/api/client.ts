@@ -14,4 +14,9 @@ export const api = {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ enabled })
   }),
+  setMirror: (action: string) => fetch('/api/system/mirrors', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action })
+  }).then(res => res.json()),
 };

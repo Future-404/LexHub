@@ -42,6 +42,18 @@ export default function SettingsView() {
     }
   };
 
+  const handleMirrorUpdate = async (action: string) => {
+    setSaving(true);
+    try {
+      const res = await api.setMirror(action);
+      alert(res.message);
+    } catch (err) {
+      alert('操作失败: ' + String(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const updateSetting = async (key: string, value: any) => {
     setSaving(true);
     try {
@@ -99,6 +111,20 @@ export default function SettingsView() {
                 <option value="mirror">{t('settings.strategyMirror', 'Force Mirror')}</option>
               </select>
             </div>
+            
+            {settings.networkStrategy === 'proxy' && (
+              <div>
+                <label className="block text-xs font-medium text-zinc-500 mb-1">自定义代理 URL (Custom Proxy)</label>
+                <input 
+                  type="text"
+                  disabled={saving}
+                  value={settings.proxyUrl || ''}
+                  onChange={(e) => updateSetting('proxyUrl', e.target.value)}
+                  placeholder="http://127.0.0.1:7890"
+                  className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-blue-500 transition-shadow outline-none"
+                />
+              </div>
+            )}
 
             <div className="p-4 bg-zinc-50 dark:bg-zinc-900/50 rounded-xl border border-zinc-100 dark:border-zinc-800/50 space-y-3">
               <div className="flex justify-between items-center">
@@ -130,6 +156,42 @@ export default function SettingsView() {
                     {netStatus?.bestMirror ? safeHostname(netStatus.bestMirror) : <span className="text-zinc-400">Not found</span>}
                   </div>
                 </div>
+              </div>
+            </div>
+
+            <div className="pt-4 border-t border-zinc-100 dark:border-zinc-800/50">
+              <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-3">
+                快捷优化 (Quick Optimizations)
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  disabled={saving}
+                  onClick={() => handleMirrorUpdate('npm')}
+                  className="px-3 py-2 bg-zinc-50 dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 transition-colors"
+                >
+                  📦 更换 NPM 源
+                </button>
+                <button
+                  disabled={saving}
+                  onClick={() => handleMirrorUpdate('pip')}
+                  className="px-3 py-2 bg-zinc-50 dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 transition-colors"
+                >
+                  🐍 更换 PIP 源
+                </button>
+                <button
+                  disabled={saving}
+                  onClick={() => handleMirrorUpdate('system')}
+                  className="px-3 py-2 bg-zinc-50 dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 transition-colors"
+                >
+                  🐧 更换系统源
+                </button>
+                <button
+                  disabled={saving}
+                  onClick={() => handleMirrorUpdate('reset')}
+                  className="px-3 py-2 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40 text-red-600 dark:text-red-400 text-sm rounded-lg border border-red-100 dark:border-red-900/30 transition-colors"
+                >
+                  🔄 重置网络设置
+                </button>
               </div>
             </div>
           </div>
