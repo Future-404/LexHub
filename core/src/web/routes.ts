@@ -365,7 +365,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       }
 
       // Fallback for development/offline
-      const fallbackPath = path.join(path.resolve(__dirname, '../../..'), 'store', 'index.json');
+      const fallbackPath = path.join(path.resolve(__dirname, '../../..'), '../lexhub-store/index.json');
       if (fs.existsSync(fallbackPath)) {
         const fallbackData = fs.readFileSync(fallbackPath, 'utf-8');
         return reply.send(JSON.parse(fallbackData));

@@ -57,7 +57,7 @@ function ConfigModal({ module, onClose, onSaved }: { module: ExtendedModuleInfo;
         <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
           {!module.env || Object.keys(module.env).length === 0 ? (
             <div className="text-center text-sm text-zinc-500 dark:text-zinc-400 py-4">
-              该模块没有可配置的环境变量。
+              {t('modules.configEmpty', '该模块没有可配置的环境变量。')}
             </div>
           ) : (
             Object.entries(module.env).map(([key, meta]: [string, any]) => (
@@ -78,10 +78,10 @@ function ConfigModal({ module, onClose, onSaved }: { module: ExtendedModuleInfo;
         </div>
         <div className="px-6 py-4 bg-zinc-50 dark:bg-zinc-900/50 border-t border-zinc-100 dark:border-zinc-800/60 flex justify-end space-x-3">
           <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors">
-            取消
+            {t('common.cancel', '取消')}
           </button>
           <button onClick={handleSave} disabled={saving} className="px-4 py-2 bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 rounded-lg text-sm font-semibold hover:bg-zinc-800 dark:hover:bg-white transition-colors disabled:opacity-50">
-            {saving ? '保存中...' : '保存配置'}
+            {saving ? t('common.saving', '保存中...') : t('common.save', '保存配置')}
           </button>
         </div>
       </div>
@@ -213,7 +213,7 @@ export default function Modules() {
                       <TerminalSquare className="w-4 h-4" />
                     </button>
                     {mod.id === 'sillytavern' ? (
-                      <button onClick={() => setActiveDetailId(mod.id)} className="p-2 md:p-2.5 text-blue-500 hover:text-blue-600 bg-blue-50 dark:bg-blue-500/10 hover:bg-blue-100 dark:hover:bg-blue-500/20 rounded-xl transition-colors" title="管理">
+                      <button onClick={() => setActiveDetailId(mod.id)} className="p-2 md:p-2.5 text-blue-500 hover:text-blue-600 bg-blue-50 dark:bg-blue-500/10 hover:bg-blue-100 dark:hover:bg-blue-500/20 rounded-xl transition-colors" title={t('common.manage', '管理')}>
                         <ExternalLink className="w-4 h-4" />
                       </button>
                     ) : (
@@ -248,7 +248,7 @@ export default function Modules() {
         <SillyTavernPanel
           module={displayModules.find(m => m.id === activeDetailId)!}
           onClose={() => setActiveDetailId(null)}
-          onAction={async (id, action) => { await handleAction(id, action as any); }}
+          onAction={async (id, action) => { await handleAction(id, action as 'start' | 'stop' | 'install' | 'uninstall'); }}
           loadingAction={loadingAction}
         />
       )}

@@ -17,7 +17,9 @@ function loadYaml(filePath) {
 }
 
 function saveYaml(filePath, obj) {
-  fs.writeFileSync(filePath, YAML.stringify(obj), 'utf8');
+  const tmp = filePath + '.tmp';
+  fs.writeFileSync(tmp, YAML.stringify(obj), 'utf8');
+  fs.renameSync(tmp, filePath);
 }
 
 function getNestedValue(obj, keyPath) {
@@ -42,24 +44,34 @@ export async function install(ctx) {
 
   logger.info('正在拉取 SillyTavern 源码 (release 分支)...');
 
-  if (fs.existsSync(appDir)) {
-    logger.warn('目录已存在，跳过克隆，直接安装依赖');
-  } else {
-    const gitArgs = network.buildGitCloneArgs(
-      'https://github.com/SillyTavern/SillyTavern.git',
-      appDir,
-      'release'
-    );
-    await execCmd(gitArgs.cmd, gitArgs.args);
-    logger.success('源码拉取完成');
+  let wasCreated = false;
+  try {
+    if (fs.existsSync(appDir)) {
+      logger.warn('目录已存在，跳过克隆，直接安装依赖');
+    } else {
+      wasCreated = true;
+      const gitArgs = network.buildGitCloneArgs(
+        'https://github.com/SillyTavern/SillyTavern.git',
+        appDir,
+        'release'
+      );
+      await execCmd(gitArgs.cmd, gitArgs.args);
+      logger.success('源码拉取完成');
+    }
+
+    logger.info('正在安装 NPM 依赖...');
+    await execCmd('npm', ['install', '--no-audit', '--no-fund'], { cwd: appDir });
+    logger.success('依赖安装完成！');
+
+    // Apply recommended defaults
+    await _applyRecommendedConfig(appDir, logger);
+  } catch (err) {
+    if (wasCreated && fs.existsSync(appDir)) {
+      logger.warn('安装失败，正在清理残留的损坏目录...');
+      fs.rmSync(appDir, { recursive: true, force: true });
+    }
+    throw err;
   }
-
-  logger.info('正在安装 NPM 依赖...');
-  await execCmd('npm', ['install', '--no-audit', '--no-fund'], { cwd: appDir });
-  logger.success('依赖安装完成！');
-
-  // Apply recommended defaults
-  await _applyRecommendedConfig(appDir, logger);
 }
 
 // ── Start ────────────────────────────────────────────────────────────────────
@@ -92,6 +104,12 @@ export async function start(ctx) {
   });
 }
 
+export async function stop(ctx) {
+  const { logger } = ctx;
+  logger.info('正在准备停止服务...');
+  // LexHub will handle SIGTERM after this hook completes.
+}
+
 // ── Update ────────────────────────────────────────────────────────────────────
 
 export async function update(ctx) {
@@ -110,9 +128,9 @@ export async function update(ctx) {
   }
 
   logger.info('正在拉取最新 release 代码...');
-  // git pull with autostash (preserve local edits)
   const repoUrl = network.getSmartUrl('https://github.com/SillyTavern/SillyTavern.git');
-  await execCmd('git', ['pull', '--autostash', repoUrl], { cwd: appDir });
+  await execCmd('git', ['fetch', '--autostash', repoUrl, 'release'], { cwd: appDir });
+  await execCmd('git', ['reset', '--hard', 'FETCH_HEAD'], { cwd: appDir });
   logger.success('代码更新完成');
 
   logger.info('正在同步 NPM 依赖...');
@@ -136,24 +154,32 @@ export async function getVersions(ctx) {
   let tags = [];
 
   try {
-    // Check for detached HEAD
     try {
-      const branch = execSync('git symbolic-ref --short HEAD', { cwd: appDir, encoding: 'utf8', stdio: 'pipe' }).trim();
-      channel = branch;
-      isLocked = false;
-    } catch {
-      const tag = execSync('git describe --tags --exact-match 2>/dev/null || git rev-parse --short HEAD', {
-        cwd: appDir, encoding: 'utf8', shell: true, stdio: 'pipe'
-      }).trim();
-      current = tag;
-      isLocked = true;
-    }
+      // Check for detached HEAD
+      try {
+        const branch = execSync('git symbolic-ref --short HEAD', { cwd: appDir, encoding: 'utf8', stdio: 'pipe' }).trim();
+        channel = branch;
+        isLocked = false;
+      } catch {
+        try {
+          const tag = execSync('git describe --tags --exact-match', { cwd: appDir, encoding: 'utf8', stdio: 'pipe' }).trim();
+          current = tag;
+        } catch {
+          const hash = execSync('git rev-parse --short HEAD', { cwd: appDir, encoding: 'utf8', stdio: 'pipe' }).trim();
+          current = hash;
+        }
+        isLocked = true;
+      }
 
-    // Get available tags (last 10)
-    const tagOutput = execSync('git tag --sort=-v:refname | head -20', {
-      cwd: appDir, encoding: 'utf8', shell: true, stdio: 'pipe'
-    }).trim();
-    tags = tagOutput ? tagOutput.split('\n').filter(Boolean) : [];
+      // Get available tags (last 20)
+      try {
+        const tagOutput = execSync('git tag --sort=-v:refname', {
+          cwd: appDir, encoding: 'utf8', stdio: 'pipe'
+        }).trim();
+        tags = tagOutput ? tagOutput.split('\n').filter(Boolean).slice(0, 20) : [];
+      } catch {
+        tags = [];
+      }
 
     if (!current) {
       try {
@@ -173,9 +199,13 @@ export async function rollback(ctx, version) {
   const { paths, execCmd, logger } = ctx;
   const { appDir } = paths;
 
+  if (!/^[a-zA-Z0-9._-]+$/.test(version)) {
+    throw new Error('非法的版本号格式');
+  }
+
   logger.info(`正在回退到版本: ${version}...`);
   await execCmd('git', ['fetch', '--depth=1', 'origin', `refs/tags/${version}:refs/tags/${version}`], { cwd: appDir });
-  await execCmd('git', ['checkout', version, '--'], { cwd: appDir });
+  await execCmd('git', ['checkout', version], { cwd: appDir });
   logger.success(`已锁定版本: ${version}`);
 
   logger.info('同步依赖...');

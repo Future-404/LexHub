@@ -8,13 +8,16 @@ export default function LogViewer({ moduleId, onClose }: { moduleId: string, onC
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    let cancelled = false;
+    const controller = new AbortController();
+
     // 1. Fetch historical logs
     const fetchUrl = moduleId === 'system' ? '/api/system/logs?lines=200' : `/api/modules/${moduleId}/logs?type=stdout&lines=200`;
-    fetch(fetchUrl)
+    fetch(fetchUrl, { signal: controller.signal })
       .then(res => res.text())
       .then(text => {
-        if (text && text.trim()) setLogs(text.split('\n'));
-      });
+        if (!cancelled && text && text.trim()) setLogs(text.split('\n'));
+      }).catch(() => {});
 
     // 2. Setup real-time updates
     if (moduleId === 'system') {
@@ -23,10 +26,10 @@ export default function LogViewer({ moduleId, onClose }: { moduleId: string, onC
         fetch(fetchUrl)
           .then(res => res.text())
           .then(text => {
-            if (text && text.trim()) setLogs(text.split('\n'));
-          });
+            if (!cancelled && text && text.trim()) setLogs(text.split('\n'));
+          }).catch(() => {});
       }, 3000);
-      return () => clearInterval(timer);
+      return () => { cancelled = true; clearInterval(timer); controller.abort(); };
     } else {
       // WebSocket for module logs
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -44,7 +47,7 @@ export default function LogViewer({ moduleId, onClose }: { moduleId: string, onC
         } catch (e) {}
       };
 
-      return () => ws.close();
+      return () => { cancelled = true; ws.close(); controller.abort(); };
     }
   }, [moduleId]);
 

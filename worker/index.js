@@ -99,7 +99,7 @@ export default {
     }
     
     // 3. If it's curl/wget, return a short bash script that downloads the binary from this Worker
-    const loaderScript = `#!/bin/env bash
+    const loaderScript = `#!/usr/bin/env bash
 # ===================================================================
 #  LexHub — Go CLI Loader Script (Powered by Cloudflare R2)
 # ===================================================================
@@ -120,19 +120,29 @@ fi
 
 # Map OS
 if [ "$OS" = "linux" ]; then
-    GOOS="linux"
+    if [ -n "$TERMUX_VERSION" ] || [[ "$PREFIX" == *"com.termux"* ]]; then
+        BINARY="lh-android-\${GOARCH}"
+    else
+        BINARY="lh-linux-\${GOARCH}"
+    fi
 elif [ "$OS" = "darwin" ]; then
-    GOOS="darwin"
+    BINARY="lh-darwin-\${GOARCH}"
 else
     echo "Unsupported OS: $OS"
     exit 1
 fi
 
-BINARY="lh-\${GOOS}-\${GOARCH}"
 DOWNLOAD_URL="https://${url.host}/\${BINARY}"
 
 echo "[LexHub Loader] 正在从边缘节点下载安装引导器 (\${BINARY})..."
-curl -L -f "\${DOWNLOAD_URL}" -o lh
+if command -v curl >/dev/null 2>&1; then
+    curl -L -f "\${DOWNLOAD_URL}" -o lh
+elif command -v wget >/dev/null 2>&1; then
+    wget -qO lh "\${DOWNLOAD_URL}"
+else
+    echo "Error: curl or wget is required." >&2
+    exit 1
+fi
 
 chmod +x lh
 echo "[LexHub Loader] 下载完成，开始执行安装流程..."

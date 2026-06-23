@@ -3,6 +3,7 @@
 package main
 
 import (
+	"errors"
 	"os/exec"
 	"syscall"
 )
@@ -15,7 +16,13 @@ func setSysProcAttr(cmd *exec.Cmd) {
 
 func checkProcessRunning(pid int) bool {
 	err := syscall.Kill(pid, 0)
-	return err == nil
+	if err == nil {
+		return true
+	}
+	if errors.Is(err, syscall.EPERM) {
+		return true
+	}
+	return false
 }
 
 func killProcessGroup(pid int) error {

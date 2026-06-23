@@ -288,7 +288,8 @@ func injectShellAlias(lexHubDir string) {
 		filepath.Join(home, ".zshrc"),
 	}
 
-	aliasLine := fmt.Sprintf("alias lh='%s'", execPath)
+	safePath := strings.ReplaceAll(execPath, "'", "'\\''")
+	aliasLine := fmt.Sprintf("alias lh='%s'", safePath)
 	hasInjected := false
 
 	for _, rc := range rcFiles {
@@ -298,7 +299,8 @@ func injectShellAlias(lexHubDir string) {
 				continue
 			}
 
-			lines := strings.Split(string(content), "\n")
+			contentStr := strings.ReplaceAll(string(content), "\r\n", "\n")
+			lines := strings.Split(contentStr, "\n")
 			var newLines []string
 			for _, line := range lines {
 				if !strings.HasPrefix(strings.TrimSpace(line), "alias lh=") {
@@ -307,10 +309,19 @@ func injectShellAlias(lexHubDir string) {
 			}
 			newLines = append(newLines, aliasLine)
 
-			err = os.WriteFile(rc, []byte(strings.Join(newLines, "\n")), 0644)
+			tmpFile, err := os.CreateTemp(filepath.Dir(rc), ".lh-alias-*")
+			if err != nil {
+				continue
+			}
+			tmpFile.WriteString(strings.Join(newLines, "\n") + "\n")
+			tmpFile.Close()
+			err = os.Rename(tmpFile.Name(), rc)
+			
 			if err == nil {
 				printSuccess("已成功将快捷别名 'lh' 写入配置文件：%s", rc)
 				hasInjected = true
+			} else {
+				os.Remove(tmpFile.Name())
 			}
 		}
 	}
@@ -517,23 +528,26 @@ func printHelp() {
 	fmt.Println("LexHub AI 应用管理器 v2.0")
 	fmt.Println("\n用法:")
 	fmt.Println("  lh [command] [args...]")
-	fmt.Println("\n内置服务管理命令 (管理主服务后台守护进程):")
+	fmt.Println("\n系统管理命令 (LexHub 主服务):")
 	fmt.Println("  start           后台启动 LexHub 主服务")
 	fmt.Println("  stop            停止 LexHub 主服务")
 	fmt.Println("  restart         重启 LexHub 主服务")
-	fmt.Println("  status | ps     查看主服务与已安装模块的状态")
-	fmt.Println("  log             查看/追踪主服务后台运行日志")
-	fmt.Println("  install         安装/重新安装 LexHub 项目")
-	fmt.Println("  update          从最优镜像源更新并编译 LexHub")
+	fmt.Println("  status | ps     查看系统与应用运行状态")
+	fmt.Println("  log             查看 LexHub 系统日志")
+	fmt.Println("  update          自动更新并编译 LexHub")
+	fmt.Println("  sysinfo         查看设备与系统负载信息")
 	fmt.Println("  help            显示此帮助信息")
-	fmt.Println("\n应用/模块管理命令 (转发给模块管理器):")
-	fmt.Println("  lh start <module>    启动指定模块 (例如: lh start sillytavern)")
-	fmt.Println("  lh stop <module>     停止指定模块")
-	fmt.Println("  lh restart <module>  重启指定模块")
-	fmt.Println("  lh install <module>  安装指定模块")
-	fmt.Println("  lh info <module>     查看指定模块详情")
-	fmt.Println("  lh log <module>      查看指定模块日志")
-	fmt.Println("  lh sysinfo           查看系统运行信息")
+	fmt.Println("\n应用管理命令 (支持缩写，例如 lh start st):")
+	fmt.Println("  lh list | ls         列出已安装的应用")
+	fmt.Println("  lh store             浏览云端应用商店")
+	fmt.Println("  lh install <app>     安装指定应用")
+	fmt.Println("  lh uninstall <app>   卸载指定应用")
+	fmt.Println("  lh start <app>       启动应用")
+	fmt.Println("  lh stop <app>        停止应用")
+	fmt.Println("  lh restart <app>     重启应用")
+	fmt.Println("  lh update <app>      更新应用源码")
+	fmt.Println("  lh log <app>         查看应用日志")
+	fmt.Println("  lh config <app>      修改应用配置")
 }
 
 func main() {
@@ -607,7 +621,11 @@ func main() {
 			installOrUpdate(lexHubDir, false)
 		}
 	case "update":
-		installOrUpdate(lexHubDir, true)
+		if len(os.Args) > 2 {
+			forwardCommand(lexHubDir, os.Args[1:])
+		} else {
+			installOrUpdate(lexHubDir, true)
+		}
 	case "help", "-h", "--help":
 		printHelp()
 	default:

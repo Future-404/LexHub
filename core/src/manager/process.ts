@@ -129,8 +129,18 @@ export class ProcessManager {
     Logger.success(`模块 ${moduleId} 已启动 (PID: ${child.pid})`, 'Process');
     this.emit({ moduleId, event: 'started', pid: child.pid, timestamp: new Date().toISOString() });
 
+    const resetCrashTimer = setTimeout(() => {
+      const rec = this.processes.get(moduleId);
+      if (rec) {
+        rec.crashCount = 0;
+        ConfigManager.upsertModuleRecord(moduleId, { crashCount: 0 });
+        Logger.info(`模块 ${moduleId} 已稳定运行，重置崩溃计数`, 'Process');
+      }
+    }, 30000);
+
     // ── Exit handler ─────────────────────────────────────────────────────
     child.on('exit', (code, signal) => {
+      clearTimeout(resetCrashTimer);
       const record = this.processes.get(moduleId);
       this.processes.delete(moduleId);
       stdoutStream.end();

@@ -11,6 +11,7 @@ import { NetworkManager } from './network.js';
 export interface ModuleMetadata {
   id: string;
   name: string;
+  aliases?: string[];
   version: string;
   author: string;
   description: string;
@@ -120,6 +121,42 @@ export class ModuleManager {
       config: record?.config ?? this.buildDefaultConfig(meta),
       paths: { moduleDir, appDir, lifecyclePath },
     };
+  }
+
+  static async resolveModuleId(input: string): Promise<string | null> {
+    const term = input.toLowerCase();
+    
+    const installed = this.scanInstalledModules();
+    for (const mod of installed) {
+      if (mod.id.toLowerCase() === term) return mod.id;
+      if (mod.aliases?.some(a => a.toLowerCase() === term)) return mod.id;
+    }
+
+    try {
+      const settings = ConfigManager.loadSettings();
+      const storeUrl = NetworkManager.getSmartUrl(settings.storeIndexUrl);
+      const res = await NetworkManager.fetch(storeUrl);
+      if (res.ok) {
+        const storeModules = JSON.parse(await res.text()) as ModuleMetadata[];
+        for (const mod of storeModules) {
+          if (mod.id.toLowerCase() === term) return mod.id;
+          if (mod.aliases?.some(a => a.toLowerCase() === term)) return mod.id;
+        }
+      }
+    } catch {}
+
+    const localStorePath = path.join(path.resolve(__dirname, '../../..'), 'store', 'index.json');
+    if (fs.existsSync(localStorePath)) {
+      try {
+        const storeModules = JSON.parse(fs.readFileSync(localStorePath, 'utf8')) as ModuleMetadata[];
+        for (const mod of storeModules) {
+          if (mod.id.toLowerCase() === term) return mod.id;
+          if (mod.aliases?.some(a => a.toLowerCase() === term)) return mod.id;
+        }
+      } catch {}
+    }
+
+    return null;
   }
 
   private static buildDefaultConfig(

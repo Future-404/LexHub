@@ -7,6 +7,23 @@ export type LogLevel = 'info' | 'warn' | 'error' | 'success';
 export class Logger {
   private static logDir = LOGS_DIR;
   private static engineLogPath = path.join(LOGS_DIR, 'lexhub.log');
+  private static rotationScheduled = false;
+
+  private static scheduleRotation(filePath: string): void {
+    if (this.rotationScheduled) return;
+    this.rotationScheduled = true;
+    setTimeout(() => {
+      this.rotationScheduled = false;
+      try {
+        const stats = fs.statSync(filePath);
+        if (stats.size > 5 * 1024 * 1024) { // 5MB limit
+          const backupPath = `${filePath}.1`;
+          if (fs.existsSync(backupPath)) fs.unlinkSync(backupPath);
+          fs.renameSync(filePath, backupPath);
+        }
+      } catch {}
+    }, 5000).unref();
+  }
 
   /**
    * 初始化日志目录与日志文件
@@ -40,6 +57,7 @@ export class Logger {
     // 2. 写入全局日志文件 (异步，防止阻塞事件循环)
     fs.appendFile(this.engineLogPath, logLine, 'utf8', (err) => {
       if (err) console.error('Failed to write engine log file:', err);
+      else this.scheduleRotation(this.engineLogPath);
     });
   }
 

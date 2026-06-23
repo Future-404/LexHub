@@ -27,8 +27,11 @@ jobs:
           # Linux AMD64
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o build/lh-linux-amd64 .
           
-          # Linux ARM64 (Termux compatible)
-          CGO_ENABLED=0 GOOS=android GOARCH=arm64 go build -ldflags="-s -w" -o build/lh-linux-arm64 .
+          # Linux ARM64 (Standard)
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o build/lh-linux-arm64 .
+          
+          # Android ARM64 (Termux compatible)
+          CGO_ENABLED=0 GOOS=android GOARCH=arm64 go build -ldflags="-s -w" -o build/lh-android-arm64 .
           
           # macOS AMD64
           CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o build/lh-darwin-amd64 .
@@ -42,16 +45,21 @@ jobs:
           # Windows 386
           CGO_ENABLED=0 GOOS=windows GOARCH=386 go build -ldflags="-s -w" -o build/lh-windows-386.exe .
 
+          cd build
+          sha256sum * > sha256sums.txt
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
             build/lh-linux-amd64
             build/lh-linux-arm64
+            build/lh-android-arm64
             build/lh-darwin-amd64
             build/lh-darwin-arm64
             build/lh-windows-amd64.exe
             build/lh-windows-386.exe
+            build/sha256sums.txt
           draft: false
           prerelease: false
         env:

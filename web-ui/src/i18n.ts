@@ -16,7 +16,11 @@ const resources = {
         uninstall: "Uninstall",
         logs: "Logs",
         settings: "Settings",
-        status: "Status"
+        status: "Status",
+        cancel: "Cancel",
+        save: "Save Config",
+        saving: "Saving...",
+        manage: "Manage"
       },
       status: {
         RUNNING: "Running",
@@ -41,7 +45,8 @@ const resources = {
         noDesc: "No description available",
         installed: "Installed",
         store: "Store",
-        storeEmpty: "No modules available in store"
+        storeEmpty: "No modules available in store",
+        configEmpty: "No configurable environment variables for this module."
       },
       settings: {
         network: "Network Settings",
@@ -74,7 +79,11 @@ const resources = {
         logs: "日志",
         settings: "设置",
         status: "状态",
-        error: "出错了"
+        error: "出错了",
+        cancel: "取消",
+        save: "保存配置",
+        saving: "保存中...",
+        manage: "管理"
       },
       status: {
         RUNNING: "运行中",
@@ -99,7 +108,8 @@ const resources = {
         noDesc: "暂无描述",
         installed: "已安装",
         store: "模块商店",
-        storeEmpty: "商店中暂无模块"
+        storeEmpty: "商店中暂无模块",
+        configEmpty: "该模块没有可配置的环境变量。"
       },
       settings: {
         network: "网络设置",
@@ -132,7 +142,11 @@ const resources = {
         logs: "日誌",
         settings: "設置",
         status: "狀態",
-        error: "出錯了"
+        error: "出錯了",
+        cancel: "取消",
+        save: "保存配置",
+        saving: "保存中...",
+        manage: "管理"
       },
       status: {
         RUNNING: "運行中",
@@ -157,7 +171,8 @@ const resources = {
         noDesc: "暫無描述",
         installed: "已安裝",
         store: "模塊商店",
-        storeEmpty: "商店中暫無模塊"
+        storeEmpty: "商店中暫無模塊",
+        configEmpty: "該模塊沒有可配置的環境變量。"
       },
       settings: {
         network: "網絡設置",

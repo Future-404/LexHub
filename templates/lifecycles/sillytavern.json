@@ -1,6 +1,7 @@
 {
   "id": "sillytavern",
   "name": "SillyTavern",
+  "aliases": ["st"],
   "version": "1.12.0",
   "author": "SillyTavern Team",
   "description": "SillyTavern 是一个可以安装在你电脑上（以及 Android 手机）的用户界面，允许你与文本生成 AI 进行互动，并与你或社区创建的角色进行聊天或角色扮演。",

@@ -92,7 +92,9 @@ export class ConfigManager {
   }
 
   static saveSettings(settings: GlobalSettings): void {
-    fs.writeFileSync(SETTINGS_PATH, JSON.stringify(settings, null, 2), 'utf8');
+    const tmp = SETTINGS_PATH + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(settings, null, 2), 'utf8');
+    fs.renameSync(tmp, SETTINGS_PATH);
   }
 
   static patchSettings(partial: Partial<GlobalSettings>): GlobalSettings {
@@ -115,7 +117,9 @@ export class ConfigManager {
 
   static saveInstalled(registry: InstalledRegistry): void {
     registry.updatedAt = new Date().toISOString();
-    fs.writeFileSync(INSTALLED_PATH, JSON.stringify(registry, null, 2), 'utf8');
+    const tmp = INSTALLED_PATH + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(registry, null, 2), 'utf8');
+    fs.renameSync(tmp, INSTALLED_PATH);
   }
 
   static getModuleRecord(id: string): InstalledModuleRecord | undefined {

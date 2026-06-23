@@ -20,11 +20,15 @@ interface NetworkStatus {
   isScanning: boolean;
 }
 
+const safeHostname = (url: string) => {
+  try { return new URL(url).hostname; } catch { return url; }
+};
+
 export default function SettingsView() {
   const { t, i18n } = useTranslation();
   const { setLanguage } = useAppStore();
   const { data: settings, mutate: mutateSettings } = useSWR<GlobalSettings>('/api/system/settings', fetcher);
-  const { data: netStatus, mutate: mutateNetStatus } = useSWR<NetworkStatus>('/api/system/network', fetcher, { refreshInterval: 2000 });
+  const { data: netStatus, mutate: mutateNetStatus } = useSWR<NetworkStatus>('/api/system/network', fetcher, { refreshInterval: 5000 });
   const [saving, setSaving] = useState(false);
 
   const updateSetting = async (key: string, value: any) => {
@@ -112,7 +116,7 @@ export default function SettingsView() {
                     <Zap className="w-3.5 h-3.5 mr-1" /> Fastest Mirror
                   </div>
                   <div className="text-sm font-medium truncate" title={netStatus?.bestMirror || 'None'}>
-                    {netStatus?.bestMirror ? new URL(netStatus.bestMirror).hostname : <span className="text-zinc-400">Not found</span>}
+                    {netStatus?.bestMirror ? safeHostname(netStatus.bestMirror) : <span className="text-zinc-400">Not found</span>}
                   </div>
                 </div>
               </div>
