@@ -116,7 +116,7 @@ func installSystemDependencies() {
 	goos := runtime.GOOS
 
 	if isTermux() {
-		printInfo("Termux detected. Installing/Updating git, nodejs and openssl...")
+		printInfo("检测到 Termux 环境，正在安装/更新 git, nodejs 和 openssl...")
 		runCmd("", "apt-get", "update", "-y")
 		runCmd("", "apt-get", "install", "-y", "-o", "Dpkg::Options::=--force-confdef", "-o", "Dpkg::Options::=--force-confold", "git", "nodejs", "openssl")
 		return
@@ -124,47 +124,47 @@ func installSystemDependencies() {
 
 	switch goos {
 	case "darwin":
-		printInfo("macOS detected. Checking for Homebrew...")
+		printInfo("检测到 macOS 环境，正在检查 Homebrew...")
 		if _, err := exec.LookPath("brew"); err == nil {
 			runCmd("", "brew", "install", "git", "node")
 		} else {
-			printError("Homebrew not found. Please install Homebrew or install git & node manually.")
+			printError("未找到 Homebrew。请先安装 Homebrew，或者手动安装 git & node。")
 		}
 	case "linux":
 		if _, err := exec.LookPath("apt-get"); err == nil {
-			printInfo("Debian/Ubuntu detected. Installing git and nodejs...")
+			printInfo("检测到 Debian/Ubuntu 环境，正在安装 git 和 nodejs...")
 			if os.Getuid() == 0 {
 				runCmd("", "apt-get", "update", "-y")
 				runCmd("", "apt-get", "install", "-y", "-o", "Dpkg::Options::=--force-confdef", "-o", "Dpkg::Options::=--force-confold", "git", "nodejs")
 			} else {
-				printInfo("Not root. Requesting sudo to install dependencies...")
+				printInfo("当前非 root 用户，正在使用 sudo 权限以更新和安装系统依赖...")
 				runCmd("", "sudo", "env", "DEBIAN_FRONTEND=noninteractive", "apt-get", "update", "-y")
 				runCmd("", "sudo", "env", "DEBIAN_FRONTEND=noninteractive", "apt-get", "install", "-y", "-o", "Dpkg::Options::=--force-confdef", "-o", "Dpkg::Options::=--force-confold", "git", "nodejs")
 			}
 		} else if _, err := exec.LookPath("yum"); err == nil {
-			printInfo("RedHat/CentOS detected. Installing git and nodejs...")
+			printInfo("检测到 RedHat/CentOS 环境，正在安装 git 和 nodejs...")
 			if os.Getuid() == 0 {
 				runCmd("", "yum", "install", "-y", "git", "nodejs")
 			} else {
 				runCmd("", "sudo", "yum", "install", "-y", "git", "nodejs")
 			}
 		} else {
-			printWarn("Unsupported Linux distribution. Please install git and nodejs manually.")
+			printWarn("未知的 Linux 发行版，请手动安装 git 和 nodejs。")
 		}
 	case "windows":
-		printInfo("Windows detected. Checking for winget...")
+		printInfo("检测到 Windows 环境，正在检查 winget...")
 		if _, err := exec.LookPath("winget"); err == nil {
 			if _, errGit := exec.LookPath("git"); errGit != nil {
-				printInfo("Installing Git via winget...")
+				printInfo("正在通过 winget 安装 Git...")
 				runCmd("", "winget", "install", "-e", "--id", "Git.Git", "--accept-package-agreements", "--accept-source-agreements")
 			}
 			if _, errNode := exec.LookPath("node"); errNode != nil {
-				printInfo("Installing Node.js via winget...")
+				printInfo("正在通过 winget 安装 Node.js...")
 				runCmd("", "winget", "install", "-e", "--id", "OpenJS.NodeJS", "--accept-package-agreements", "--accept-source-agreements")
 			}
-			printInfo("System dependencies check complete. Note: If tools were just installed, you may need to restart your terminal later.")
+			printInfo("系统依赖环境检查完成！提示：如果是刚刚安装的依赖，你可能需要重启终端以使别名生效。")
 		} else {
-			printError("winget not found. Please install Git and Node.js manually: \n  - Git: https://git-scm.com\n  - Node.js: https://nodejs.org")
+			printError("未找到 winget。请手动下载安装 Git 和 Node.js: \n  - Git: https://git-scm.com\n  - Node.js: https://nodejs.org")
 		}
 	}
 }
@@ -240,79 +240,106 @@ func raceMirrors() string {
 }
 
 func installOrUpdate(lexHubDir string, isUpdate bool) {
-	printInfo("Starting LexHub Setup...")
+	printInfo("正在启动 LexHub 安装配置流程...")
 	checkDependencies()
 
-	printInfo("Racing GitHub mirrors for optimal speed...")
+	printInfo("正在对 GitHub 镜像源进行并发测速...")
 	bestUrl := raceMirrors()
-	printSuccess("Using download source: %s", bestUrl)
+	printSuccess("已选择最优下载源：%s", bestUrl)
 
 	if _, err := os.Stat(filepath.Join(lexHubDir, ".git")); err == nil {
-		printInfo("Existing repository found. Fetching updates...")
+		printInfo("检测到已存在本地仓库，正在拉取更新...")
 		if err := runCmd(lexHubDir, "git", "remote", "set-url", "origin", bestUrl); err != nil {
-			printError("Failed to update remote URL: %v", err)
+			printError("更新远程仓库 URL 失败：%v", err)
 			return
 		}
 		if err := runCmd(lexHubDir, "git", "fetch", "origin"); err != nil {
-			printError("Failed to fetch from origin: %v", err)
+			printError("拉取更新失败：%v", err)
 			return
 		}
 		if err := runCmd(lexHubDir, "git", "reset", "--hard", "FETCH_HEAD"); err != nil {
-			printError("Failed to hard reset repository: %v", err)
+			printError("硬重置本地仓库失败：%v", err)
 			return
 		}
 	} else {
-		printInfo("Cloning repository into %s...", lexHubDir)
+		printInfo("正在克隆 LexHub 仓库至 %s...", lexHubDir)
 		parentDir := filepath.Dir(lexHubDir)
 		if err := os.MkdirAll(parentDir, 0755); err != nil {
-			printError("Failed to create parent directory: %v", err)
+			printError("创建父级目录失败：%v", err)
 			return
 		}
 		if err := runCmd(parentDir, "git", "clone", "--depth", "1", bestUrl, filepath.Base(lexHubDir)); err != nil {
-			printError("Failed to clone repository: %v", err)
+			printError("克隆仓库失败：%v", err)
 			return
 		}
 	}
 
-	printInfo("Installing root level dependencies...")
+	printInfo("正在安装根级别依赖...")
 	if err := runCmd(lexHubDir, "npm", "install", "yaml", "--save-exact"); err != nil {
-		printWarn("Root level dependency installation returned code: %v", err)
+		printWarn("安装根级别依赖失败（已跳过）：%v", err)
 	}
 
 	coreDir := filepath.Join(lexHubDir, "core")
-	printInfo("Installing dependencies for Core...")
+	printInfo("正在安装 Core 后端服务依赖...")
 	if err := runCmd(coreDir, "npm", "install"); err != nil {
-		printError("Failed to install core dependencies: %v", err)
+		printError("安装 Core 后端依赖失败：%v", err)
 		return
 	}
-	printInfo("Building Core...")
+	printInfo("正在构建 Core 后端代码...")
 	if err := runCmd(coreDir, "npm", "run", "build"); err != nil {
-		printError("Failed to build core: %v", err)
+		printError("构建 Core 后端代码失败：%v", err)
 		return
 	}
 
 	webUiDir := filepath.Join(lexHubDir, "web-ui")
-	printInfo("Installing dependencies for Web UI...")
+	printInfo("正在安装 Web UI 前端依赖...")
 	if err := runCmd(webUiDir, "npm", "install"); err != nil {
-		printError("Failed to install web-ui dependencies: %v", err)
+		printError("安装 Web UI 前端依赖失败：%v", err)
 		return
 	}
-	printInfo("Building Web UI...")
+	printInfo("正在构建 Web UI 前端代码...")
 	if err := runCmd(webUiDir, "npm", "run", "build"); err != nil {
-		printError("Failed to build web-ui: %v", err)
+		printError("构建 Web UI 前端代码失败：%v", err)
 		return
 	}
 
 	injectShellAlias(lexHubDir)
+	printPostInstallGuide(lexHubDir)
+}
+
+func printPostInstallGuide(lexHubDir string) {
+	fmt.Println()
+	printSuccess(colorGreen + "★ LexHub 安装并初始化完成！" + colorReset)
+	fmt.Println("==================================================")
+	fmt.Println("🎉 欢迎使用 LexHub AI 应用管理器！接下来请按照以下指引操作：")
+	fmt.Println()
 	if runtime.GOOS == "windows" {
-		printSuccess("LexHub setup completed successfully!")
+		fmt.Println("1️⃣  【重要】请重新打开一个 PowerShell 终端以激活 'lh' 命令行别名。")
+		fmt.Println("2️⃣  在命令行运行以下命令启动后台管理面板服务：")
+		fmt.Println("    lh start")
+		fmt.Println("3️⃣  在手机/电脑浏览器中浏览器中访问：http://127.0.0.1:3000 进入可视化面板。")
+	} else {
+		fmt.Println("1️⃣  【重要】激活 'lh' 别名（新开窗口或在当前终端运行）：")
+		fmt.Println("    source ~/.bashrc  (若使用 Zsh，请输入: source ~/.zshrc)")
+		fmt.Println("2️⃣  启动 LexHub 主服务后台进程：")
+		fmt.Println("    lh start")
+		fmt.Println("3️⃣  在浏览器访问以下地址进入管理面板：")
+		fmt.Println("    http://127.0.0.1:3000")
 	}
+	fmt.Println()
+	fmt.Println("💡 常用快捷命令行工具（在任意目录下执行）：")
+	fmt.Println("   lh install sillytavern   # 一键安装酒馆模块")
+	fmt.Println("   lh start sillytavern     # 一键启动酒馆模块")
+	fmt.Println("   lh stop sillytavern      # 一键关闭酒馆")
+	fmt.Println("   lh list                  # 查看所有已安装应用的状态")
+	fmt.Println("==================================================")
+	fmt.Println()
 }
 
 func injectShellAlias(lexHubDir string) {
 	goos := runtime.GOOS
 	if goos == "windows" {
-		printInfo("Attempting to add LexHub to user PATH...")
+		printInfo("正在尝试将 LexHub 添加到系统用户 PATH 中...")
 		script := fmt.Sprintf(`$p = [Environment]::GetEnvironmentVariable("PATH", "User"); if ($p -notlike "*%s*") { [Environment]::SetEnvironmentVariable("PATH", $p + ";%s", "User") }`, lexHubDir, lexHubDir)
 		err := runCmd("", "powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script)
 		if err == nil {
@@ -341,7 +368,6 @@ func injectShellAlias(lexHubDir string) {
 
 	safePath := strings.ReplaceAll(execPath, "'", "'\\''")
 	aliasLine := fmt.Sprintf("alias lh='%s'", safePath)
-	hasInjected := false
 
 	for _, rc := range rcFiles {
 		if _, err := os.Stat(rc); err == nil {
@@ -370,18 +396,10 @@ func injectShellAlias(lexHubDir string) {
 			
 			if err == nil {
 				printSuccess("已成功将快捷别名 'lh' 写入配置文件：%s", rc)
-				hasInjected = true
 			} else {
 				os.Remove(tmpFile.Name())
 			}
 		}
-	}
-
-	if hasInjected {
-		fmt.Println()
-		printSuccess(colorGreen + "★ LexHub 安装并初始化完成！" + colorReset)
-		printSuccess(colorYellow + "【重要步骤】请在终端执行以下命令激活 'lh' 命令行工具：" + colorReset)
-		fmt.Printf("\n    " + colorGreen + "source ~/.bashrc" + colorReset + "  (若使用 Zsh，请执行: " + colorGreen + "source ~/.zshrc" + colorReset + ")\n\n")
 	}
 }
 
