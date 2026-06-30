@@ -42,7 +42,7 @@ export async function createServer(): Promise<FastifyInstance> {
           const rootDomain = settings.gatewayCookieDomain 
             ? `https://lexhub${settings.gatewayCookieDomain}` 
             : '/';
-          return reply.redirect(302, rootDomain); 
+          return reply.code(302).redirect(rootDomain); 
         }
       }
       return (reply as any).from(targetUrl + req.url);

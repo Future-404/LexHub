@@ -12,3 +12,17 @@
 - **Remediation**:
   1. Refactored `routes.ts` to statically import `ROOT_DIR`, `MODULES_DIR`, and `LOGS_DIR` from `../manager/config.js` at the top of the file, completely removing all inner `require()` calls and fixing the ReferenceError/TypeError bugs.
   2. Replaced `execSync` shell executions with `spawnSync` calls using direct argument arrays (e.g. `spawnSync(lhBin, ['enable'])`), making the execution 100% immune to shell injection.
+
+### 2. [LEXHUB-SEC-002] Remediate Nested Dependency Vulnerabilities & Upgrade to Fastify v5
+- **Files**: `core/package.json`, `core/src/web/server.ts`
+- **Severity**: CRITICAL / HIGH
+- **OWASP Category**: A03:2025 - Supply Chain Failures
+- **Issue**:
+  - `npm audit` flagged 9 vulnerabilities (including 2 critical and 6 high).
+  - Vulnerabilities included critical auth bypasses in `fast-jwt` (used by `@fastify/jwt`), reply forwarding bypasses in `@fastify/reply-from`, path traversal in `fast-uri` (used by `fastify`), and multiple smuggling/DoS vulnerabilities in `undici`.
+- **Remediation**:
+  1. Configured npm `"overrides"` in `package.json` to force safe nested dependency versions (`fast-uri` to `^3.1.2`, `fast-jwt` to `^6.2.4`, and nested `undici` under `@fastify/reply-from` to `^6.27.0`), avoiding version conflicts with root-level packages.
+  2. Upgraded `@fastify/reply-from` to the latest secure version `12.6.2`.
+  3. Upgraded `fastify` and all core plugins (`@fastify/cookie`, `@fastify/jwt`, `@fastify/static`, `@fastify/websocket`) to their latest major versions (Fastify v5), reducing the remaining vulnerability count to exactly zero.
+  4. Fixed a TypeScript signature shift for `reply.redirect` inside `server.ts` from Fastify v5.
+
