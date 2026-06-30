@@ -1,8 +1,14 @@
-# Sentinel Security Insights
+# Sentinel Security Journal
 
-## Vulnerability Heuristics
-- **Path Traversal / Prefix-Matching Bypass (CWE-22)**: When validating that a resolved path is within a designated base directory (e.g. using `.startsWith()`), matching raw string prefixes without verifying directory separators allows attackers to bypass boundary restrictions by creating siblings with matching name prefixes (e.g. `/root/LexHub_Backup-dangerous` matching `/root/LexHub_Backup`).
-- **Remediation**: Always ensure that the prefix boundary is enforced either by comparing exact path equivalence or by appending `path.sep` (e.g. `allowedBase + path.sep`) before checking `.startsWith()`.
+## Vulnerability Patterns & Fixes
 
-## Shipped Remediations
-- **2026-06-30**: Fixed path traversal prefix bypass vulnerability in backup restore route (`/api/modules/:id/restore`) in `core/src/web/routes.ts`.
+### 1. [LEXHUB-BUG-001] Broken Dynamic Require & Shell Command Injection Risk in Autostart
+- **File**: `core/src/web/routes.ts`
+- **Severity**: HIGH
+- **OWASP Category**: A05:2025 - Injection / A03:2025 - Supply Chain Failures
+- **Issue**:
+  1. The route handlers for `/api/system/autostart` dynamically imported `LEXHUB_DIR` via `require('../manager/config.js')`. However, `LEXHUB_DIR` was never exported from `config.ts` (the correct constant was `ROOT_DIR`). This resulted in a TypeError, causing the autostart feature to break.
+  2. The code ran the CLI binary via `execSync` inside a shell using template literals: `execSync(\`"${lhBin}" enable\`, ...)`. Running commands within a shell can expose applications to Shell/Command Injection (CWE-78) if the executable path or arguments are under external influence.
+- **Remediation**:
+  1. Refactored `routes.ts` to statically import `ROOT_DIR`, `MODULES_DIR`, and `LOGS_DIR` from `../manager/config.js` at the top of the file, completely removing all inner `require()` calls and fixing the ReferenceError/TypeError bugs.
+  2. Replaced `execSync` shell executions with `spawnSync` calls using direct argument arrays (e.g. `spawnSync(lhBin, ['enable'])`), making the execution 100% immune to shell injection.

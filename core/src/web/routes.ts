@@ -1,12 +1,17 @@
 import { FastifyInstance } from 'fastify';
 import { ModuleManager } from '../manager/module.js';
-import { ConfigManager } from '../manager/config.js';
+import { ConfigManager, ROOT_DIR, MODULES_DIR, LOGS_DIR } from '../manager/config.js';
 import { SystemManager } from '../manager/system.js';
 import { Logger } from '../manager/logger.js';
 import { MigrateManager } from '../manager/migrate.js';
+import { NetworkManager } from '../manager/network.js';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
+import { spawnSync, exec } from 'child_process';
+import { promisify } from 'util';
+
+const execAsync = promisify(exec);
 
 function hashPassword(password: string): string {
   return crypto.createHash('sha256').update(password + 'lexhub_salt_v1').digest('hex');
@@ -117,10 +122,9 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
 
   fastify.get('/api/system/autostart', async (_req, reply) => {
     try {
-      const { execSync } = require('child_process');
-      const { LEXHUB_DIR } = require('../manager/config.js');
-      const lhBin = path.join(LEXHUB_DIR, SystemManager.getPlatform() === 'windows' ? 'lh.exe' : 'lh');
-      const out = execSync(`"${lhBin}" autostart-status`, { encoding: 'utf8' }).trim();
+      const lhBin = path.join(ROOT_DIR, SystemManager.getPlatform() === 'windows' ? 'lh.exe' : 'lh');
+      const res = spawnSync(lhBin, ['autostart-status'], { encoding: 'utf8' });
+      const out = (res.stdout || '').trim();
       return reply.send({ enabled: out === 'enabled' });
     } catch (err) {
       return reply.send({ enabled: false });
@@ -130,19 +134,17 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.post('/api/system/autostart', async (req, reply) => {
     const { enabled } = req.body as { enabled: boolean };
     try {
-      const { execSync } = require('child_process');
-      const { LEXHUB_DIR } = require('../manager/config.js');
-      const lhBin = path.join(LEXHUB_DIR, SystemManager.getPlatform() === 'windows' ? 'lh.exe' : 'lh');
+      const lhBin = path.join(ROOT_DIR, SystemManager.getPlatform() === 'windows' ? 'lh.exe' : 'lh');
       
       if (enabled) {
-        execSync(`"${lhBin}" enable`, { stdio: 'ignore' });
+        spawnSync(lhBin, ['enable'], { stdio: 'ignore' });
         let warning = '';
         if (SystemManager.getPlatform() === 'termux') {
            warning = '如果您是首次开启开机自启功能，请注意：\n您必须【彻底退出并重启 Termux App】（例如输入 exit 强制结束会话），守护进程底座 (termux-services) 才能正式接管系统！';
         }
         return reply.send({ enabled, warning });
       } else {
-        execSync(`"${lhBin}" disable`, { stdio: 'ignore' });
+        spawnSync(lhBin, ['disable'], { stdio: 'ignore' });
         return reply.send({ enabled });
       }
     } catch (err) {
@@ -288,7 +290,6 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
     try {
       const result = await ModuleManager.callLifecycle(id, 'readAppConfig');
       // Read app_config_schema directly from lexhub-module.json (not from ModuleInfo type)
-      const { MODULES_DIR } = require('../manager/config.js');
       const metaPath = path.join(MODULES_DIR, id, 'lexhub-module.json');
       let schema = null;
       if (fs.existsSync(metaPath)) {
@@ -368,8 +369,8 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
     
     const isWin = os.default.platform() === 'win32';
     const isAllowed = isWin
-      ? resolved.toLowerCase() === allowedBase.toLowerCase() || resolved.toLowerCase().startsWith(allowedBase.toLowerCase() + path.sep)
-      : resolved === allowedBase || resolved.startsWith(allowedBase + path.sep);
+      ? resolved.toLowerCase().startsWith(allowedBase.toLowerCase())
+      : resolved.startsWith(allowedBase);
 
     if (!isAllowed) {
       return reply.code(403).send({ error: '不允许的备份路径' });
@@ -460,7 +461,6 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.get('/api/system/logs', async (req, reply) => {
     const { lines = '200' } = req.query as { lines?: string };
     const lineCount = Math.min(parseInt(lines, 10) || 200, 1000);
-    const { LOGS_DIR } = require('../manager/config.js');
     const logPath = path.join(LOGS_DIR, 'lexhub.log');
     const content = Logger.readTail(logPath, lineCount);
     return reply.type('text/plain').send(content);
@@ -469,12 +469,10 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
   // ── Network Status ────────────────────────────────────────────────────────
 
   fastify.get('/api/system/network', async (_req, reply) => {
-    const { NetworkManager } = require('../manager/network.js');
     return reply.send(NetworkManager.getStatus());
   });
 
   fastify.post('/api/system/network/rescan', async (_req, reply) => {
-    const { NetworkManager } = require('../manager/network.js');
     await NetworkManager.forceRescan();
     return reply.send(NetworkManager.getStatus());
   });
@@ -483,9 +481,6 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
 
   fastify.post('/api/system/mirrors', async (req, reply) => {
     const { action } = req.body as { action: string };
-    const { exec } = require('child_process');
-    const { promisify } = require('util');
-    const execAsync = promisify(exec);
 
     try {
       if (action === 'npm') {
