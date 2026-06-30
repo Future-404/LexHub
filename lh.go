@@ -71,6 +71,7 @@ func runCmd(dir string, name string, args ...string) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
+	cmd.Env = append(os.Environ(), "DEBIAN_FRONTEND=noninteractive")
 	return cmd.Run()
 }
 
@@ -116,8 +117,8 @@ func installSystemDependencies() {
 
 	if isTermux() {
 		printInfo("Termux detected. Installing/Updating git, nodejs and openssl...")
-		runCmd("", "pkg", "update", "-y")
-		runCmd("", "pkg", "install", "git", "nodejs", "openssl", "-y")
+		runCmd("", "apt-get", "update", "-y")
+		runCmd("", "apt-get", "install", "-y", "-o", "Dpkg::Options::=--force-confdef", "-o", "Dpkg::Options::=--force-confold", "git", "nodejs", "openssl")
 		return
 	}
 
@@ -134,11 +135,11 @@ func installSystemDependencies() {
 			printInfo("Debian/Ubuntu detected. Installing git and nodejs...")
 			if os.Getuid() == 0 {
 				runCmd("", "apt-get", "update", "-y")
-				runCmd("", "apt-get", "install", "-y", "git", "nodejs")
+				runCmd("", "apt-get", "install", "-y", "-o", "Dpkg::Options::=--force-confdef", "-o", "Dpkg::Options::=--force-confold", "git", "nodejs")
 			} else {
 				printInfo("Not root. Requesting sudo to install dependencies...")
-				runCmd("", "sudo", "apt-get", "update", "-y")
-				runCmd("", "sudo", "apt-get", "install", "-y", "git", "nodejs")
+				runCmd("", "sudo", "env", "DEBIAN_FRONTEND=noninteractive", "apt-get", "update", "-y")
+				runCmd("", "sudo", "env", "DEBIAN_FRONTEND=noninteractive", "apt-get", "install", "-y", "-o", "Dpkg::Options::=--force-confdef", "-o", "Dpkg::Options::=--force-confold", "git", "nodejs")
 			}
 		} else if _, err := exec.LookPath("yum"); err == nil {
 			printInfo("RedHat/CentOS detected. Installing git and nodejs...")
