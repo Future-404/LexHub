@@ -10,7 +10,8 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@fastify/cookie": "^9.4.0",
@@ -28,6 +29,7 @@
     "@types/node": "^20.14.9",
     "@types/ws": "^8.5.10",
     "tsx": "^4.16.0",
-    "typescript": "^5.5.2"
+    "typescript": "^5.5.2",
+    "vitest": "^4.1.9"
   }
 }

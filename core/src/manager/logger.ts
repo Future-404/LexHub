@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
-import { LOGS_DIR } from './config.js';
+const ROOT_DIR = path.resolve(__dirname, '../../..');
+const LOGS_DIR = path.join(ROOT_DIR, 'logs');
 
 export type LogLevel = 'info' | 'warn' | 'error' | 'success';
 
