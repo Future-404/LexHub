@@ -316,13 +316,13 @@ func printPostInstallGuide(lexHubDir string) {
 	if runtime.GOOS == "windows" {
 		fmt.Println("1️⃣  【重要】请重新打开一个 PowerShell 终端以激活 'lh' 命令行别名。")
 		fmt.Println("2️⃣  在命令行运行以下命令启动后台管理面板服务：")
-		fmt.Println("    lh start")
-		fmt.Println("3️⃣  在手机/电脑浏览器中浏览器中访问：http://127.0.0.1:3000 进入可视化面板。")
+		fmt.Println("    lh")
+		fmt.Println("3️⃣  在手机/电脑浏览器中访问：http://127.0.0.1:3000 进入可视化面板。")
 	} else {
 		fmt.Println("1️⃣  【重要】激活 'lh' 别名（新开窗口或在当前终端运行）：")
 		fmt.Println("    source ~/.bashrc  (若使用 Zsh，请输入: source ~/.zshrc)")
-		fmt.Println("2️⃣  启动 LexHub 主服务后台进程：")
-		fmt.Println("    lh start")
+		fmt.Println("2️⃣  启动 LexHub 后台服务进程：")
+		fmt.Println("    lh")
 		fmt.Println("3️⃣  在浏览器访问以下地址进入管理面板：")
 		fmt.Println("    http://127.0.0.1:3000")
 	}
@@ -864,24 +864,13 @@ func main() {
 		_, errDist := os.Stat(filepath.Join(coreDir, "dist", "index.js"))
 		_, errSrc := os.Stat(filepath.Join(coreDir, "src", "index.ts"))
 		if errDist != nil && errSrc != nil {
-			printInfo("LexHub is not installed. Initiating installation flow...")
+			printInfo("检测到 LexHub 尚未安装，正在启动安装程序...")
 			installOrUpdate(lexHubDir, false)
 			return
 		}
 
-		printInfo("LexHub is installed. Starting in the foreground...")
-		var entryCmd string
-		var entryArgs []string
-		if errDist == nil {
-			entryCmd = "node"
-			entryArgs = []string{"dist/index.js", "web"}
-		} else {
-			entryCmd = "npx"
-			entryArgs = []string{"tsx", "src/index.ts", "web"}
-		}
-		if err := runCmd(coreDir, entryCmd, entryArgs...); err != nil {
-			os.Exit(1)
-		}
+		// 默认启动后台守护进程（Daemon 模式）
+		startDaemon(lexHubDir)
 		return
 	}
 
