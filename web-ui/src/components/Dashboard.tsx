@@ -24,8 +24,8 @@ export default function Dashboard() {
   const { t } = useTranslation();
   const [activeLogId, setActiveLogId] = useState<string | null>(null);
   
-  const { data, error, isLoading } = useSWR<SystemInfo>('/api/system/info', fetcher, { refreshInterval: 3000 });
-  const { data: modules } = useSWR<ModuleInfo[]>('/api/modules', fetcher, { refreshInterval: 3000 });
+  const { data, error, isLoading } = useSWR<SystemInfo>('/api/system/info', fetcher, { refreshInterval: 5000 });
+  const { data: modules } = useSWR<ModuleInfo[]>('/api/modules', fetcher, { refreshInterval: 5000 });
 
   const runningCount = modules?.filter((m) => m.status === 'RUNNING').length || 0;
 

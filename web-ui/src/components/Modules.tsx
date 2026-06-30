@@ -125,7 +125,7 @@ export default function Modules() {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<'installed' | 'store'>('installed');
   
-  const { data: localModules, error: localError, isLoading: localLoading, mutate: mutateLocal } = useSWR<ExtendedModuleInfo[]>('/api/modules', fetcher, { refreshInterval: 3000 });
+  const { data: localModules, error: localError, isLoading: localLoading, mutate: mutateLocal } = useSWR<ExtendedModuleInfo[]>('/api/modules', fetcher, { refreshInterval: 5000 });
   const { data: storeModules, error: storeError, isLoading: storeLoading } = useSWR<ExtendedModuleInfo[]>(activeTab === 'store' ? '/api/store/modules' : null, fetcher);
   
   const [activeLogId, setActiveLogId] = useState<string | null>(null);

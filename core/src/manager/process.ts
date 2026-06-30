@@ -207,7 +207,9 @@ export class ProcessManager {
       const isAbnormal = code !== 0 && code !== null;
 
       if (isAbnormal) {
-        const newCrashCount = (record?.crashCount ?? 0) + 1;
+        // Read crash count from disk (single source of truth) to avoid race with in-memory stale value
+        const persistedRecord = ConfigManager.getModuleRecord(moduleId);
+        const newCrashCount = (persistedRecord?.crashCount ?? 0) + 1;
         Logger.error(
           `模块 ${moduleId} 异常退出 (code=${code}, signal=${signal})，crash #${newCrashCount}`,
           'Process'
@@ -219,9 +221,9 @@ export class ProcessManager {
         });
         this.emit({ moduleId, event: 'crashed', code, signal, timestamp: new Date().toISOString() });
 
-        // Auto-restart logic
-        const moduleRecord = ConfigManager.getModuleRecord(moduleId);
-        const autoRestart = (moduleRecord?.config?.auto_restart as boolean | undefined) ?? false;
+        // Auto-restart logic — re-read from disk to get the freshly persisted crashCount
+        const freshRecord = ConfigManager.getModuleRecord(moduleId);
+        const autoRestart = (freshRecord?.config?.auto_restart as boolean | undefined) ?? false;
         if (autoRestart && newCrashCount <= MAX_CRASH_RESTARTS) {
           Logger.warn(
             `自动重启模块 ${moduleId} (${newCrashCount}/${MAX_CRASH_RESTARTS})...`,
