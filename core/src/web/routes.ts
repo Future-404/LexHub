@@ -8,10 +8,7 @@ import { NetworkManager } from '../manager/network.js';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
-import { spawnSync, exec } from 'child_process';
-import { promisify } from 'util';
-
-const execAsync = promisify(exec);
+import { spawnSync, execFileSync } from 'child_process';
 
 function hashPassword(password: string): string {
   return crypto.createHash('sha256').update(password + 'lexhub_salt_v1').digest('hex');
@@ -484,15 +481,16 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
 
     try {
       if (action === 'npm') {
-        await execAsync('npm config set registry https://registry.npmmirror.com');
+        execFileSync('npm', ['config', 'set', 'registry', 'https://registry.npmmirror.com']);
         return reply.send({ message: 'NPM 源已成功切换至 npmmirror' });
       } else if (action === 'pip') {
-        await execAsync('pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple');
+        execFileSync('pip', ['config', 'set', 'global.index-url', 'https://pypi.tuna.tsinghua.edu.cn/simple']);
         return reply.send({ message: 'PIP 源已切换至清华大学镜像' });
       } else if (action === 'system') {
         const platform = SystemManager.getPlatform();
         if (platform === 'termux') {
-          await execAsync(`sed -i 's@packages.termux.org@mirrors.tuna.tsinghua.edu.cn/termux@g' $PREFIX/etc/apt/sources.list`);
+          const sourcesPath = path.join(process.env.PREFIX || '/data/data/com.termux/files/usr', 'etc/apt/sources.list');
+          execFileSync('sed', ['-i', 's@packages.termux.org@mirrors.tuna.tsinghua.edu.cn/termux@g', sourcesPath]);
           return reply.send({ message: 'Termux 系统源已成功切换至清华大学镜像' });
         } else if (platform === 'linux') {
           return reply.send({ message: 'Linux 请在终端执行: bash <(curl -sSL https://linuxmirrors.cn/main.sh)' });
@@ -500,9 +498,9 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
           return reply.send({ message: '当前系统无需更换系统源' });
         }
       } else if (action === 'reset') {
-        try { await execAsync('git config --global --unset http.proxy'); } catch {}
-        try { await execAsync('git config --global --unset https.proxy'); } catch {}
-        try { await execAsync('npm config delete registry'); } catch {}
+        try { execFileSync('git', ['config', '--global', '--unset', 'http.proxy']); } catch {}
+        try { execFileSync('git', ['config', '--global', '--unset', 'https.proxy']); } catch {}
+        try { execFileSync('npm', ['config', 'delete', 'registry']); } catch {}
         return reply.send({ message: '网络设置与代理缓存已重置' });
       }
       return reply.code(400).send({ error: '未知操作' });
@@ -515,7 +513,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
 
   fastify.get('/api/store/modules', async (_req, reply) => {
     try {
-      const { NetworkManager } = require('../manager/network.js');
+      // NetworkManager already imported at top of file via static ESM import
       const settings = ConfigManager.loadSettings();
       const storeUrl = NetworkManager.getSmartUrl(settings.storeIndexUrl);
 

@@ -71,11 +71,61 @@ export class ProcessManager {
       throw new Error(`未找到模块生命周期文件: ${lifecyclePath}`);
     }
 
-    // Prepare log streams
+    // Prepare log streams with rotation support
     Logger.init();
     const { stdout: stdoutLog, stderr: stderrLog } = Logger.getModuleLogPaths(moduleId);
-    const stdoutStream = fs.createWriteStream(stdoutLog, { flags: 'a' });
-    const stderrStream = fs.createWriteStream(stderrLog, { flags: 'a' });
+
+    const MODULE_LOG_MAX_SIZE = 10 * 1024 * 1024; // 10 MB per log file
+
+    /**
+     * Create a write stream that auto-rotates when file exceeds max size.
+     * Keeps at most 1 backup (.1) to bound disk usage.
+     */
+    function createRotatingStream(logPath: string): fs.WriteStream {
+      // Rotate before opening if already oversized
+      try {
+        if (fs.existsSync(logPath)) {
+          const stats = fs.statSync(logPath);
+          if (stats.size > MODULE_LOG_MAX_SIZE) {
+            const backup = logPath + '.1';
+            if (fs.existsSync(backup)) fs.unlinkSync(backup);
+            fs.renameSync(logPath, backup);
+          }
+        }
+      } catch { /* ignore rotation errors */ }
+      return fs.createWriteStream(logPath, { flags: 'a' });
+    }
+
+    let stdoutStream = createRotatingStream(stdoutLog);
+    let stderrStream = createRotatingStream(stderrLog);
+
+    // Periodically check if rotation is needed (every 60s)
+    const rotationTimer = setInterval(() => {
+      try {
+        for (const [logPath, streamRef] of [[stdoutLog, 'stdout'], [stderrLog, 'stderr']] as const) {
+          const stats = fs.statSync(logPath);
+          if (stats.size > MODULE_LOG_MAX_SIZE) {
+            const backup = logPath + '.1';
+            if (fs.existsSync(backup)) fs.unlinkSync(backup);
+            // Close current stream, rotate, reopen
+            if (streamRef === 'stdout') {
+              stdoutStream.end();
+              fs.renameSync(logPath, backup);
+              stdoutStream = fs.createWriteStream(logPath, { flags: 'a' });
+              child.stdout?.unpipe();
+              child.stdout?.pipe(stdoutStream);
+            } else {
+              stderrStream.end();
+              fs.renameSync(logPath, backup);
+              stderrStream = fs.createWriteStream(logPath, { flags: 'a' });
+              child.stderr?.unpipe();
+              child.stderr?.pipe(stderrStream);
+            }
+          }
+        }
+      } catch { /* ignore rotation errors */ }
+    }, 60_000);
+    rotationTimer.unref();
 
     // Resolve node binary (Windows needs .cmd extension)
     const nodeBin = SystemManager.resolveBinaryName('node');
@@ -148,6 +198,7 @@ export class ProcessManager {
     // ── Exit handler ─────────────────────────────────────────────────────
     child.on('exit', (code, signal) => {
       clearTimeout(resetCrashTimer);
+      clearInterval(rotationTimer);
       const record = this.processes.get(moduleId);
       this.processes.delete(moduleId);
       stdoutStream.end();
