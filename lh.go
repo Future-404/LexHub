@@ -74,14 +74,40 @@ func runCmd(dir string, name string, args ...string) error {
 	return cmd.Run()
 }
 
+func testExecutable(name string, args ...string) bool {
+	cmd := exec.Command(name, args...)
+	if err := cmd.Run(); err != nil {
+		return false
+	}
+	return true
+}
+
 func checkDependencies() {
 	_, errNode := exec.LookPath("node")
 	_, errGit := exec.LookPath("git")
 	_, errNpm := exec.LookPath("npm")
 
-	if errNode != nil || errGit != nil || errNpm != nil {
-		printWarn("Missing some system dependencies (node/git/npm). Attempting to resolve...")
+	nodeOk := errNode == nil && testExecutable("node", "-v")
+	gitOk := errGit == nil && testExecutable("git", "--version")
+	npmOk := errNpm == nil && testExecutable("npm", "-v")
+
+	if !nodeOk || !gitOk || !npmOk {
+		printWarn("System dependencies (node/git/npm) are missing or broken. Attempting to resolve...")
 		installSystemDependencies()
+
+		// Re-verify after install
+		nodeOk = testExecutable("node", "-v")
+		gitOk = testExecutable("git", "--version")
+		npmOk = testExecutable("npm", "-v")
+		if !nodeOk || !gitOk || !npmOk {
+			if isTermux() {
+				printError("Some dependencies are still broken. In Termux, this is usually due to shared library mismatches (e.g. OpenSSL).")
+				printError("Please run: pkg update && pkg upgrade -y")
+			} else {
+				printError("Failed to auto-install dependencies. Please install git, nodejs and npm manually.")
+			}
+			os.Exit(1)
+		}
 	}
 }
 
@@ -89,9 +115,9 @@ func installSystemDependencies() {
 	goos := runtime.GOOS
 
 	if isTermux() {
-		printInfo("Termux detected. Installing git and nodejs...")
+		printInfo("Termux detected. Installing/Updating git, nodejs and openssl...")
 		runCmd("", "pkg", "update", "-y")
-		runCmd("", "pkg", "install", "git", "nodejs", "-y")
+		runCmd("", "pkg", "install", "git", "nodejs", "openssl", "-y")
 		return
 	}
 
