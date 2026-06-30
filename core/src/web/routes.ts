@@ -368,8 +368,8 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
     
     const isWin = os.default.platform() === 'win32';
     const isAllowed = isWin
-      ? resolved.toLowerCase().startsWith(allowedBase.toLowerCase())
-      : resolved.startsWith(allowedBase);
+      ? resolved.toLowerCase() === allowedBase.toLowerCase() || resolved.toLowerCase().startsWith(allowedBase.toLowerCase() + path.sep)
+      : resolved === allowedBase || resolved.startsWith(allowedBase + path.sep);
 
     if (!isAllowed) {
       return reply.code(403).send({ error: '不允许的备份路径' });
