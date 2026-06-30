@@ -19,7 +19,7 @@ interface ExtendedModuleInfo extends ModuleInfo {
 
 function ConfigModal({ module, onClose, onSaved }: { module: ExtendedModuleInfo; onClose: () => void; onSaved: () => void }) {
   const { t } = useTranslation();
-  const [config, setConfig] = useState<Record<string, any>>({});
+  const [config, setConfig] = useState<Record<string, unknown>>({});
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -61,7 +61,7 @@ function ConfigModal({ module, onClose, onSaved }: { module: ExtendedModuleInfo;
               {t('modules.configEmpty', '该模块没有可配置的环境变量。')}
             </div>
           ) : (
-            Object.entries(module.env).map(([key, meta]: [string, any]) => (
+            Object.entries(module.env).map(([key, meta]: [string, unknown]) => (
               <div key={key}>
                 <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">
                   {key}

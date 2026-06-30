@@ -109,14 +109,14 @@ function AppConfigPanel({ moduleId }: { moduleId: string }) {
   }, [moduleId]);
 
   const getVal = (key: string) => {
-    return key.split('.').reduce((acc: any, k) => acc?.[k], localConfig);
+    return key.split('.').reduce((acc: Record<string, unknown> | unknown, k) => (acc as Record<string, unknown>)?.[k], localConfig);
   };
 
   const setVal = (key: string, value: unknown) => {
     setLocalConfig(prev => {
       const next = { ...prev };
       const keys = key.split('.');
-      let cur: any = next;
+      let cur: Record<string, unknown> = next;
       for (let i = 0; i < keys.length - 1; i++) {
         cur[keys[i]] = cur[keys[i]] ? { ...cur[keys[i]] } : {};
         cur = cur[keys[i]];
@@ -145,7 +145,7 @@ function AppConfigPanel({ moduleId }: { moduleId: string }) {
       });
       if (!r.ok) throw new Error(await r.text());
       setMsg({ type: 'ok', text: '配置已保存！重启服务后生效。' });
-    } catch (e: any) {
+    } catch (e: unknown) {
       setMsg({ type: 'err', text: e.message });
     } finally {
       setSaving(false);
@@ -567,7 +567,7 @@ function PasswordPanel({ moduleId }: { moduleId: string }) {
       if (!r.ok) throw new Error(await r.text());
       setMsg({ type: 'ok', text: '密码已重置！' });
       setPassword('');
-    } catch (e: any) {
+    } catch (e: unknown) {
       setMsg({ type: 'err', text: e.message });
     } finally {
       setBusy(false);

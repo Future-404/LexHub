@@ -76,7 +76,7 @@ export default function SettingsView() {
     }
   };
 
-  const updateSetting = async (key: string, value: any) => {
+  const updateSetting = async (key: string, value: unknown) => {
     setSaving(true);
     try {
       await fetch('/api/system/settings', {

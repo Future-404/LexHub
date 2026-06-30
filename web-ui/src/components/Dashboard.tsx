@@ -16,8 +16,8 @@ export interface ModuleInfo {
   status: string;
   name: string;
   icon?: string;
-  config?: Record<string, any>;
-  env?: Record<string, any>;
+  config?: Record<string, unknown>;
+  env?: Record<string, unknown>;
 }
 
 export default function Dashboard() {
