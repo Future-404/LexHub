@@ -1,0 +1,23 @@
+{
+  "id": "cliproxyapi",
+  "name": "CLIProxyAPI 代理",
+  "aliases": ["cliproapi"],
+  "version": "1.0.0",
+  "author": "router-for-me",
+  "description": "CLIProxyAPI 是一个由 Go 编写的高性能代理工具，支持远程管理和 WebUI 后台，非常适合在手机端作为代理中转使用。",
+  "icon": "⚡",
+  "categories": ["AI", "Proxy"],
+  "platforms": ["linux", "termux"],
+  "repo_url": "https://github.com/router-for-me/CLIProxyAPI.git",
+  "branch": "main",
+  "dependencies": {
+    "binaries": ["go", "git"]
+  },
+  "env": {
+    "PORT": { "default": 8317, "description": "监听端口" }
+  },
+  "port_mapping": {
+    "source": 8317,
+    "target": 8317
+  }
+}

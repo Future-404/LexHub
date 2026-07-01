@@ -58,7 +58,10 @@ export class NetworkManager {
 
     try {
       // 1. Scan proxies
+      const settings = ConfigManager.loadSettings();
+      const ownPort = settings.webPort || 8080;
       for (const port of PROXY_PORTS) {
+        if (port === ownPort) continue; // Skip own port to avoid self-detection
         if (await this.checkPortOpen('127.0.0.1', port)) {
           this.detectedProxy = `http://127.0.0.1:${port}`;
           Logger.info(`Found local proxy at ${this.detectedProxy}`, 'Network');

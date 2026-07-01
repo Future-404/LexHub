@@ -8,6 +8,7 @@ import { ModuleInfo } from './Dashboard';
 import { cn } from '../lib/utils';
 import SillyTavernPanel from './SillyTavernPanel';
 import CloudflarePanel from './CloudflarePanel';
+import DangerModal from './DangerModal';
 
 interface ExtendedModuleInfo extends ModuleInfo {
   description?: string;
@@ -132,14 +133,15 @@ export default function Modules() {
   const [activeConfigId, setActiveConfigId] = useState<string | null>(null);
   const [activeDetailId, setActiveDetailId] = useState<string | null>(null);
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
+  const [uninstallId, setUninstallId] = useState<string | null>(null);
 
   const handleAction = async (id: string, action: 'start' | 'stop' | 'install' | 'uninstall') => {
     try {
       setLoadingAction(`${id}-${action}`);
       await api[action](id);
       mutateLocal();
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      alert(`操作失败: ${e.message || String(e)}`);
     } finally {
       setLoadingAction(null);
     }
@@ -253,7 +255,7 @@ export default function Modules() {
                         <Settings className="w-4 h-4" />
                       </button>
                     )}
-                    <button onClick={() => handleAction(mod.id, 'uninstall')} disabled={loadingAction === `${mod.id}-uninstall`} className="p-2 md:p-2.5 text-red-500 hover:text-red-600 bg-red-50 dark:bg-red-500/10 hover:bg-red-100 dark:hover:bg-red-500/20 rounded-xl transition-colors disabled:opacity-50" title={t('common.uninstall')}>
+                    <button onClick={() => setUninstallId(mod.id)} disabled={loadingAction === `${mod.id}-uninstall`} className="p-2 md:p-2.5 text-red-500 hover:text-red-600 bg-red-50 dark:bg-red-500/10 hover:bg-red-100 dark:hover:bg-red-500/20 rounded-xl transition-colors disabled:opacity-50" title={t('common.uninstall')}>
                       {loadingAction === `${mod.id}-uninstall` ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                     </button>
                   </>
@@ -267,6 +269,21 @@ export default function Modules() {
       {activeLogId && (
         <LogViewer moduleId={activeLogId} onClose={() => setActiveLogId(null)} />
       )}
+
+      <DangerModal
+        isOpen={!!uninstallId}
+        title="确认卸载模块"
+        description={`警告：您即将卸载模块 "${uninstallId}"。此操作将彻底删除该模块的所有文件及本地用户数据！该操作是不可逆的。`}
+        actionText="确认卸载"
+        confirmWord={uninstallId || undefined}
+        isLoading={loadingAction === `${uninstallId}-uninstall`}
+        onConfirm={async () => {
+          if (!uninstallId) return;
+          await handleAction(uninstallId, 'uninstall');
+          setUninstallId(null);
+        }}
+        onClose={() => setUninstallId(null)}
+      />
       
       {activeConfigId && (
         <ConfigModal 

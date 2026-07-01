@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { Logger } from './logger.js';
-import { ConfigManager, MODULES_DIR } from './config.js';
+import { ConfigManager, MODULES_DIR, ROOT_DIR } from './config.js';
 import { ProcessManager } from './process.js';
 import { SystemManager } from './system.js';
 import { NetworkManager } from './network.js';
@@ -50,6 +50,28 @@ export interface ModuleInfo extends ModuleMetadata {
 // ── Module Manager ─────────────────────────────────────────────────────────
 
 export class ModuleManager {
+  private static activeOperations = new Map<string, string>();
+
+  static isOperationRunning(id: string): boolean {
+    return this.activeOperations.has(id);
+  }
+
+  static getRunningOperation(id: string): string | undefined {
+    return this.activeOperations.get(id);
+  }
+
+  static acquireLock(id: string, op: string): void {
+    if (this.activeOperations.has(id)) {
+      throw new Error(`模块 ${id} 正在执行操作 "${this.activeOperations.get(id)}"，请稍候再试。`);
+    }
+    this.activeOperations.set(id, op);
+  }
+
+  static releaseLock(id: string, op: string): void {
+    if (this.activeOperations.get(id) === op) {
+      this.activeOperations.delete(id);
+    }
+  }
   /**
    * Read and parse the lexhub-module.json for a given module directory.
    */
@@ -73,6 +95,7 @@ export class ModuleManager {
     const pureHost = host.split(':')[0];
     const installed = ConfigManager.getAllInstalledModules();
     
+    // 1. Check Module configs
     for (const mod of installed) {
       const pubHost = mod.config?.publicHost as string;
       const pubPort = mod.config?.publicPort as number;
@@ -80,7 +103,44 @@ export class ModuleManager {
         return `http://127.0.0.1:${pubPort}`;
       }
     }
+
+    // 2. Check Custom Ingress configs
+    const settings = ConfigManager.loadSettings();
+    if (settings.customIngress) {
+      for (const rule of settings.customIngress) {
+        if (rule.hostname && pureHost === rule.hostname && rule.targetUrl) {
+          return rule.targetUrl;
+        }
+      }
+    }
+
     return null;
+  }
+
+  /**
+   * Provision built-in system modules (like cloudflare)
+   */
+  static initBuiltInModules(): void {
+    const cloudflareDir = path.join(MODULES_DIR, 'cloudflare');
+    if (!fs.existsSync(cloudflareDir)) {
+      fs.mkdirSync(cloudflareDir, { recursive: true });
+    }
+    
+    const metaPath = path.join(cloudflareDir, 'lexhub-module.json');
+    if (!fs.existsSync(metaPath)) {
+      const templateMeta = path.join(ROOT_DIR, 'templates', 'lifecycles', 'cloudflare.json');
+      if (fs.existsSync(templateMeta)) {
+        fs.copyFileSync(templateMeta, metaPath);
+      }
+    }
+    
+    const lcPath = path.join(cloudflareDir, 'lifecycle.js');
+    if (!fs.existsSync(lcPath)) {
+      const templateLc = path.join(ROOT_DIR, 'templates', 'lifecycles', 'cloudflare.js');
+      if (fs.existsSync(templateLc)) {
+        fs.copyFileSync(templateLc, lcPath);
+      }
+    }
   }
 
   /**
@@ -93,6 +153,7 @@ export class ModuleManager {
 
     for (const dirent of dirs) {
       if (!dirent.isDirectory()) continue;
+      if (dirent.name === 'cloudflare') continue;
       const moduleDir = path.join(MODULES_DIR, dirent.name);
       const meta = this.readMetadata(moduleDir);
       if (!meta) continue;
@@ -195,152 +256,161 @@ export class ModuleManager {
    * Install a module: download if missing, check dependencies, run lifecycle install hook.
    */
   static async installModule(id: string): Promise<void> {
-    const moduleDir = path.join(MODULES_DIR, id);
-    
-    // Remote Download Logic — module dir doesn't exist, need to fetch from store
-    if (!fs.existsSync(moduleDir)) {
-      Logger.info(`模块 ${id} 不在本地，尝试从商店获取安装信息...`, 'Module');
-      ConfigManager.setModuleStatus(id, 'INSTALLING');
-      try {
-        let storeModules: ModuleMetadata[] | null = null;
+    if (this.activeOperations.has(id) && this.activeOperations.get(id) !== 'install') {
+      throw new Error(`模块 ${id} 正在执行操作 "${this.activeOperations.get(id)}"，请稍候再试。`);
+    }
+    this.activeOperations.set(id, 'install');
 
-        // 1. Try remote store
+    try {
+      const moduleDir = path.join(MODULES_DIR, id);
+      
+      // Remote Download Logic — module dir doesn't exist, need to fetch from store
+      if (!fs.existsSync(moduleDir)) {
+        Logger.info(`模块 ${id} 不在本地，尝试从商店获取安装信息...`, 'Module');
+        ConfigManager.setModuleStatus(id, 'INSTALLING');
         try {
-          const settings = ConfigManager.loadSettings();
-          const storeUrl = NetworkManager.getSmartUrl(settings.storeIndexUrl);
-          const res = await NetworkManager.fetch(storeUrl);
-          if (res.ok) {
-            const text = await res.text();
-            storeModules = JSON.parse(text) as ModuleMetadata[];
-          } else {
-            Logger.warn(`远端商店返回 ${res.status}，降级使用本地 store/index.json`, 'Module');
+          let storeModules: ModuleMetadata[] | null = null;
+
+          // 1. Try remote store
+          try {
+            const settings = ConfigManager.loadSettings();
+            const storeUrl = NetworkManager.getSmartUrl(settings.storeIndexUrl);
+            const res = await NetworkManager.fetch(storeUrl);
+            if (res.ok) {
+              const text = await res.text();
+              storeModules = JSON.parse(text) as ModuleMetadata[];
+            } else {
+              Logger.warn(`远端商店返回 ${res.status}，降级使用本地 store/index.json`, 'Module');
+            }
+          } catch (fetchErr) {
+            Logger.warn(`远端商店请求失败: ${fetchErr}，降级使用本地 store/index.json`, 'Module');
           }
-        } catch (fetchErr) {
-          Logger.warn(`远端商店请求失败: ${fetchErr}，降级使用本地 store/index.json`, 'Module');
-        }
 
-        // 2. Fallback to local store/index.json
-        if (!storeModules) {
-          const localStorePath = path.join(
-            path.resolve(__dirname, '../../..'),
-            'store',
-            'index.json'
-          );
-          if (fs.existsSync(localStorePath)) {
-            storeModules = JSON.parse(fs.readFileSync(localStorePath, 'utf8')) as ModuleMetadata[];
-            Logger.info('已从本地 store/index.json 加载模块列表', 'Module');
-          } else {
-            throw new Error('远端商店不可用且本地 store/index.json 不存在');
+          // 2. Fallback to local store/index.json
+          if (!storeModules) {
+            const localStorePath = path.join(
+              path.resolve(__dirname, '../../..'),
+              'store',
+              'index.json'
+            );
+            if (fs.existsSync(localStorePath)) {
+              storeModules = JSON.parse(fs.readFileSync(localStorePath, 'utf8')) as ModuleMetadata[];
+              Logger.info('已从本地 store/index.json 加载模块列表', 'Module');
+            } else {
+              throw new Error('远端商店不可用且本地 store/index.json 不存在');
+            }
           }
-        }
 
-        const remoteMeta = storeModules.find(m => m.id === id);
-        if (!remoteMeta || !remoteMeta.repo_url) {
-          throw new Error(`商店中找不到模块 "${id}" 或缺少 repo_url`);
-        }
-
-        // Create module directory scaffold FIRST
-        fs.mkdirSync(moduleDir, { recursive: true });
-
-        // Write lexhub-module.json — prefer full template (with app_config_schema) over bare store metadata
-        const metaPath = path.join(moduleDir, 'lexhub-module.json');
-        if (!fs.existsSync(metaPath)) {
-          const templateMeta = path.join(path.resolve(__dirname, '../../..'), 'templates', 'lifecycles', `${id}.json`);
-          if (fs.existsSync(templateMeta)) {
-            fs.copyFileSync(templateMeta, metaPath);
-            Logger.info(`已使用内置完整元数据模板: ${id}`, 'Module');
-          } else {
-            fs.writeFileSync(metaPath, JSON.stringify(remoteMeta, null, 2), 'utf8');
+          const remoteMeta = storeModules.find(m => m.id === id);
+          if (!remoteMeta || !remoteMeta.repo_url) {
+            throw new Error(`商店中找不到模块 "${id}" 或缺少 repo_url`);
           }
-        }
 
-        // Write lifecycle.js — prefer a bundled template, fallback to minimal default
-        const lcPath = path.join(moduleDir, 'lifecycle.js');
-        if (!fs.existsSync(lcPath)) {
-          const templateLc = path.join(path.resolve(__dirname, '../../..'), 'templates', 'lifecycles', `${id}.js`);
-          if (fs.existsSync(templateLc)) {
-            fs.copyFileSync(templateLc, lcPath);
-            Logger.info(`已使用内置 lifecycle 模板: ${id}`, 'Module');
-          } else {
-            // Minimal default lifecycle — lifecycle.install() will clone + npm install
-            fs.writeFileSync(lcPath, `import fs from 'fs';
-export async function install(ctx) {
-  const { paths, execCmd, logger, network } = ctx;
-  if (fs.existsSync(paths.appDir)) {
-    logger.info('源码目录已存在，跳过克隆');
-  } else {
-    logger.info('正在拉取源码...');
-    const gitArgs = network.buildGitCloneArgs(${JSON.stringify(remoteMeta.repo_url)}, paths.appDir, ${JSON.stringify(remoteMeta.branch || 'main')});
-    await execCmd(gitArgs.cmd, gitArgs.args);
-    logger.success('源码拉取完成');
+          // Create module directory scaffold FIRST
+          fs.mkdirSync(moduleDir, { recursive: true });
+
+          // Write lexhub-module.json — prefer full template (with app_config_schema) over bare store metadata
+          const metaPath = path.join(moduleDir, 'lexhub-module.json');
+          if (!fs.existsSync(metaPath)) {
+            const templateMeta = path.join(path.resolve(__dirname, '../../..'), 'templates', 'lifecycles', `${id}.json`);
+            if (fs.existsSync(templateMeta)) {
+              fs.copyFileSync(templateMeta, metaPath);
+              Logger.info(`已使用内置完整元数据模板: ${id}`, 'Module');
+            } else {
+              fs.writeFileSync(metaPath, JSON.stringify(remoteMeta, null, 2), 'utf8');
+            }
+          }
+
+          // Write lifecycle.js — prefer a bundled template, fallback to minimal default
+          const lcPath = path.join(moduleDir, 'lifecycle.js');
+          if (!fs.existsSync(lcPath)) {
+            const templateLc = path.join(path.resolve(__dirname, '../../..'), 'templates', 'lifecycles', `${id}.js`);
+            if (fs.existsSync(templateLc)) {
+              fs.copyFileSync(templateLc, lcPath);
+              Logger.info(`已使用内置 lifecycle 模板: ${id}`, 'Module');
+            } else {
+              // Minimal default lifecycle — lifecycle.install() will clone + npm install
+              fs.writeFileSync(lcPath, `import fs from 'fs';
+  export async function install(ctx) {
+    const { paths, execCmd, logger, network } = ctx;
+    if (fs.existsSync(paths.appDir)) {
+      logger.info('源码目录已存在，跳过克隆');
+    } else {
+      logger.info('正在拉取源码...');
+      const gitArgs = network.buildGitCloneArgs(${JSON.stringify(remoteMeta.repo_url)}, paths.appDir, ${JSON.stringify(remoteMeta.branch || 'main')});
+      await execCmd(gitArgs.cmd, gitArgs.args);
+      logger.success('源码拉取完成');
+    }
+    logger.info('正在安装依赖...');
+    await execCmd('npm', ['install', '--no-audit', '--no-fund'], { cwd: paths.appDir });
+    logger.success('安装完成！');
   }
-  logger.info('正在安装依赖...');
-  await execCmd('npm', ['install', '--no-audit', '--no-fund'], { cwd: paths.appDir });
-  logger.success('安装完成！');
-}
-export async function start(ctx) {
-  const { paths, config, spawnCmd } = ctx;
-  return spawnCmd('node', ['server.js'], {
-    cwd: paths.appDir,
-    env: { ...process.env, PORT: String(config.PORT || 8000) }
-  });
-}
-`, 'utf8');
+  export async function start(ctx) {
+    const { paths, config, spawnCmd } = ctx;
+    return spawnCmd('node', ['server.js'], {
+      cwd: paths.appDir,
+      env: { ...process.env, PORT: String(config.PORT || 8000) }
+    });
+  }
+  `, 'utf8');
+            }
           }
-        }
 
-        Logger.success(`模块 ${id} 脚手架已就绪`, 'Module');
-        // NOTE: lifecycle.install() below will handle the actual app source download
+          Logger.success(`模块 ${id} 脚手架已就绪`, 'Module');
+          // NOTE: lifecycle.install() below will handle the actual app source download
+        } catch (err) {
+          const msg = String(err);
+          ConfigManager.setModuleStatus(id, 'ERROR', { lastError: msg });
+          Logger.error(`模块 ${id} 远端下载失败: ${msg}`, 'Module');
+          throw err;
+        }
+      }
+
+      const meta = this.readMetadata(moduleDir);
+      if (!meta) throw new Error(`模块 ${id} 的 lexhub-module.json 不存在`);
+
+      Logger.info(`开始安装模块: ${meta.name} (${id})`, 'Module');
+      ConfigManager.setModuleStatus(id, 'INSTALLING');
+
+      // Dependency check
+      const missingBinaries = (meta.dependencies?.binaries ?? []).filter(
+        (bin) => !SystemManager.hasBinary(bin)
+      );
+      if (missingBinaries.length > 0) {
+        const msg = `缺少依赖: ${missingBinaries.join(', ')}`;
+        ConfigManager.setModuleStatus(id, 'ERROR', { lastError: msg });
+        throw new Error(msg);
+      }
+
+      // Run lifecycle.js install()
+      const lifecyclePath = path.join(moduleDir, 'lifecycle.js');
+      if (!fs.existsSync(lifecyclePath)) {
+        throw new Error(`未找到 lifecycle.js: ${lifecyclePath}`);
+      }
+
+      try {
+        const lifecycle = await import(lifecyclePath);
+        const ctx = this.buildContext(meta, moduleDir);
+        await lifecycle.install(ctx);
+
+        ConfigManager.upsertModuleRecord(id, {
+          id,
+          name: meta.name,
+          version: meta.version,
+          installedAt: new Date().toISOString(),
+          status: 'STOPPED',
+          crashCount: 0,
+          config: this.buildDefaultConfig(meta),
+        });
+        Logger.success(`模块 ${meta.name} 安装完成！`, 'Module');
       } catch (err) {
         const msg = String(err);
         ConfigManager.setModuleStatus(id, 'ERROR', { lastError: msg });
-        Logger.error(`模块 ${id} 远端下载失败: ${msg}`, 'Module');
+        Logger.error(`模块 ${id} 安装失败: ${msg}`, 'Module');
         throw err;
       }
-    }
-
-    const meta = this.readMetadata(moduleDir);
-    if (!meta) throw new Error(`模块 ${id} 的 lexhub-module.json 不存在`);
-
-    Logger.info(`开始安装模块: ${meta.name} (${id})`, 'Module');
-    ConfigManager.setModuleStatus(id, 'INSTALLING');
-
-    // Dependency check
-    const missingBinaries = (meta.dependencies?.binaries ?? []).filter(
-      (bin) => !SystemManager.hasBinary(bin)
-    );
-    if (missingBinaries.length > 0) {
-      const msg = `缺少依赖: ${missingBinaries.join(', ')}`;
-      ConfigManager.setModuleStatus(id, 'ERROR', { lastError: msg });
-      throw new Error(msg);
-    }
-
-    // Run lifecycle.js install()
-    const lifecyclePath = path.join(moduleDir, 'lifecycle.js');
-    if (!fs.existsSync(lifecyclePath)) {
-      throw new Error(`未找到 lifecycle.js: ${lifecyclePath}`);
-    }
-
-    try {
-      const lifecycle = await import(lifecyclePath);
-      const ctx = this.buildContext(meta, moduleDir);
-      await lifecycle.install(ctx);
-
-      ConfigManager.upsertModuleRecord(id, {
-        id,
-        name: meta.name,
-        version: meta.version,
-        installedAt: new Date().toISOString(),
-        status: 'STOPPED',
-        crashCount: 0,
-        config: this.buildDefaultConfig(meta),
-      });
-      Logger.success(`模块 ${meta.name} 安装完成！`, 'Module');
-    } catch (err) {
-      const msg = String(err);
-      ConfigManager.setModuleStatus(id, 'ERROR', { lastError: msg });
-      Logger.error(`模块 ${id} 安装失败: ${msg}`, 'Module');
-      throw err;
+    } finally {
+      this.activeOperations.delete(id);
     }
   }
 
@@ -372,15 +442,23 @@ export async function start(ctx) {
   // ── Uninstall ─────────────────────────────────────────────────────────────
 
   static async uninstallModule(id: string): Promise<void> {
-    if (ProcessManager.isRunning(id)) {
-      await ProcessManager.stopModule(id);
+    if (this.activeOperations.has(id)) {
+      throw new Error(`模块 ${id} 正在执行操作 "${this.activeOperations.get(id)}"，请稍候再试。`);
     }
-    const moduleDir = path.join(MODULES_DIR, id);
-    if (fs.existsSync(moduleDir)) {
-      fs.rmSync(moduleDir, { recursive: true, force: true });
+    this.activeOperations.set(id, 'uninstall');
+    try {
+      if (ProcessManager.isRunning(id)) {
+        await ProcessManager.stopModule(id);
+      }
+      const moduleDir = path.join(MODULES_DIR, id);
+      if (fs.existsSync(moduleDir)) {
+        fs.rmSync(moduleDir, { recursive: true, force: true });
+      }
+      ConfigManager.removeModuleRecord(id);
+      Logger.info(`模块 ${id} 已卸载。`, 'Module');
+    } finally {
+      this.activeOperations.delete(id);
     }
-    ConfigManager.removeModuleRecord(id);
-    Logger.info(`模块 ${id} 已卸载。`, 'Module');
   }
 
   // ── Lifecycle caller ──────────────────────────────────────────────────────
@@ -401,8 +479,35 @@ export async function start(ctx) {
     if (typeof lifecycle[fn] !== 'function') {
       throw new Error(`lifecycle.js 中不存在函数: ${fn}`);
     }
-    const ctx = this.buildContext(meta, moduleDir);
-    return lifecycle[fn](ctx, ...args);
+
+    const mutatingFns = [
+      'install',
+      'update',
+      'rollback',
+      'switchChannel',
+      'unlock',
+      'restore',
+      'backup',
+      'installPlugin',
+      'uninstallPlugin',
+      'resetAllPlugins'
+    ];
+
+    if (mutatingFns.includes(fn)) {
+      if (this.activeOperations.has(id)) {
+        throw new Error(`模块 ${id} 正在执行操作 "${this.activeOperations.get(id)}"，请稍候再试。`);
+      }
+      this.activeOperations.set(id, fn);
+    }
+
+    try {
+      const ctx = this.buildContext(meta, moduleDir);
+      return await lifecycle[fn](ctx, ...args);
+    } finally {
+      if (mutatingFns.includes(fn)) {
+        this.activeOperations.delete(id);
+      }
+    }
   }
 
 
@@ -410,10 +515,12 @@ export async function start(ctx) {
     const appDir = path.join(moduleDir, 'app');
     const { execCmd, spawnCmd } = buildExec();
     const record = ConfigManager.getModuleRecord(meta.id);
+    const isTermux = process.env.PREFIX?.includes('com.termux') || fs.existsSync('/data/data/com.termux');
 
     return {
       module: meta,
       config: record?.config ?? this.buildDefaultConfig(meta),
+      isTermux,
       paths: {
         moduleDir,
         appDir,

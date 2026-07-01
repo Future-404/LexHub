@@ -5,18 +5,23 @@ export default {
     const userAgent = request.headers.get('User-Agent') || '';
     
     // 1. If path is a specific binary name, serve it directly from R2 bucket
-    if (path.startsWith('lh-')) {
+    if (path.startsWith('lh-') || path === 'sha256sums.txt' || path.endsWith('.sha256')) {
       try {
         const object = await env.LAUNCHER_BUCKET.get(path);
         if (object === null) {
-          return new Response('Binary file not found in R2 bucket', { status: 404 });
+          return new Response('File not found in R2 bucket', { status: 404 });
         }
         
         const headers = new Headers();
         object.writeHttpMetadata(headers);
         headers.set('etag', object.httpEtag);
-        headers.set('content-type', 'application/octet-stream');
-        headers.set('content-disposition', `attachment; filename="${path}"`);
+        if (path.endsWith('.txt') || path.endsWith('.sha256')) {
+          headers.set('content-type', 'text/plain;charset=UTF-8');
+          headers.set('content-disposition', 'inline');
+        } else {
+          headers.set('content-type', 'application/octet-stream');
+          headers.set('content-disposition', `attachment; filename="${path}"`);
+        }
         
         return new Response(object.body, { headers });
       } catch (err) {
@@ -100,13 +105,13 @@ export default {
           <div class="code-block">
             irm https://${url.host} | iex
           </div>
-          <span class="hint">安装程序会自动获取最优镜像，并检查系统依赖环境。</span>
+          <span class="hint">安装程序会自动进行 SHA256 完整性校验并检查依赖环境。</span>
         </div>
       </body>
       </html>`;
       return new Response(html, { headers: { 'content-type': 'text/html;charset=UTF-8' } });
     }
-
+ 
     // 3. PowerShell loader script
     if (userAgent.includes('PowerShell') || userAgent.includes('WindowsPowerShell')) {
       const psScript = `# ===================================================================
@@ -129,15 +134,43 @@ $BINARY = "lh-windows-\${GOARCH}.exe"
 $DOWNLOAD_URL = "https://${url.host}/\${BINARY}"
 
 Invoke-WebRequest -Uri $DOWNLOAD_URL -OutFile "lh.exe"
-Write-Host "[LexHub Loader] 下载完成，开始执行安装流程..." -ForegroundColor Green
 
+# Verify Checksum
+try {
+    $SHA_TXT = Invoke-RestMethod -Uri "https://${url.host}/sha256sums.txt" -TimeoutSec 5
+    $EXPECTED_HASH = ""
+    foreach ($line in ($SHA_TXT -split "\`n")) {
+        if ($line -like "*$BINARY*") {
+            $EXPECTED_HASH = ($line -split "\s+")[0].Trim()
+            break
+        }
+    }
+    
+    if ($EXPECTED_HASH) {
+        Write-Host "[LexHub Loader] 正在校验二进制完整性..." -ForegroundColor Cyan
+        $LOCAL_HASH = (Get-FileHash -Path "lh.exe" -Algorithm SHA256).Hash.ToLower()
+        if ($LOCAL_HASH -ne $EXPECTED_HASH.ToLower()) {
+            Write-Host "Error: SHA256 checksum mismatch for lh.exe!" -ForegroundColor Red
+            Write-Host "Expected: $EXPECTED_HASH" -ForegroundColor Red
+            Write-Host "Got:      $LOCAL_HASH" -ForegroundColor Red
+            Remove-Item -Force "lh.exe"
+            exit 1
+        }
+        Write-Host "[LexHub Loader] 完整性校验成功！" -ForegroundColor Green
+    } else {
+        Write-Host "[LexHub Loader] 警告: 未在校验文件中找到该架构的哈希值，跳过校验。" -ForegroundColor Yellow
+    }
+} catch {
+    Write-Host "[LexHub Loader] 警告: 无法获取校验文件或执行校验，跳过完整性校验 ($($_.Exception.Message))" -ForegroundColor Yellow
+}
+
+Write-Host "[LexHub Loader] 正在执行安装流程..." -ForegroundColor Green
 .\\lh.exe install
 `;
       return new Response(psScript, { headers: { 'content-type': 'text/plain;charset=UTF-8' } });
     }
-
-    
-    // 3. If it's curl/wget, return a short bash script that downloads the binary from this Worker
+ 
+    // 4. If it's curl/wget, return a short bash script that downloads the binary from this Worker
     const loaderScript = `#!/usr/bin/env bash
 # ===================================================================
 #  LexHub — Go CLI Loader Script (Powered by Cloudflare R2)
@@ -183,11 +216,52 @@ else
     exit 1
 fi
 
+# Check SHA256 integrity
+echo "[LexHub Loader] 正在获取 SHA256 校验信息..."
+download_to_stdout() {
+    local target_url="$1"
+    if command -v curl >/dev/null 2>&1; then
+        curl -s -L "$target_url"
+    elif command -v wget >/dev/null 2>&1; then
+        wget -qO- "$target_url"
+    fi
+}
+
+SHA_TXT=$(download_to_stdout "https://${url.host}/sha256sums.txt" || true)
+EXPECTED_HASH=$(echo "$SHA_TXT" | grep "\${BINARY}" | awk '{print $1}' || true)
+
+if [ -n "$EXPECTED_HASH" ]; then
+    echo "[LexHub Loader] 正在校验二进制完整性..."
+    LOCAL_HASH=""
+    if command -v sha256sum >/dev/null 2>&1; then
+        LOCAL_HASH=$(sha256sum lh | awk '{print $1}')
+    elif command -v shasum >/dev/null 2>&1; then
+        LOCAL_HASH=$(shasum -a 256 lh | awk '{print $1}')
+    elif command -v openssl >/dev/null 2>&1; then
+        LOCAL_HASH=$(openssl dgst -sha256 lh | awk '{print $2}')
+    fi
+    
+    if [ -n "$LOCAL_HASH" ]; then
+        if [ "$LOCAL_HASH" != "$EXPECTED_HASH" ]; then
+            echo "Error: SHA256 checksum mismatch for lh!" >&2
+            echo "Expected: $EXPECTED_HASH" >&2
+            echo "Got:      $LOCAL_HASH" >&2
+            rm -f lh
+            exit 1
+        fi
+        echo "[LexHub Loader] 完整性校验成功！"
+    else
+        echo "[LexHub Loader] 警告: 未找到可用的 SHA256 计算工具，跳过校验。"
+    fi
+else
+    echo "[LexHub Loader] 警告: 无法获取校验文件或未找到对应架构哈希，跳过校验。"
+fi
+
 chmod +x lh
-echo "[LexHub Loader] 下载完成，开始执行安装流程..."
+echo "[LexHub Loader] 开始执行安装流程..."
 ./lh install
 `;
-
+ 
     return new Response(loaderScript, { 
       headers: { 'content-type': 'text/plain;charset=UTF-8' } 
     });

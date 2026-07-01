@@ -1,9 +1,7 @@
 import useSWR from 'swr';
 import { useTranslation } from 'react-i18next';
 import { fetcher } from '../api/client';
-import { Activity, Cpu, MemoryStick, Timer, TerminalSquare } from 'lucide-react';
-import { useState } from 'react';
-import LogViewer from './LogViewer';
+import { Activity, Cpu, MemoryStick, Timer } from 'lucide-react';
 
 export interface SystemInfo {
   uptime: number;
@@ -22,7 +20,6 @@ export interface ModuleInfo {
 
 export default function Dashboard() {
   const { t } = useTranslation();
-  const [activeLogId, setActiveLogId] = useState<string | null>(null);
   
   const { data, error, isLoading } = useSWR<SystemInfo>('/api/system/info', fetcher, { refreshInterval: 5000 });
   const { data: modules } = useSWR<ModuleInfo[]>('/api/modules', fetcher, { refreshInterval: 5000 });
@@ -35,13 +32,6 @@ export default function Dashboard() {
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <h1 className="text-2xl font-semibold tracking-tight">{t('nav.dashboard')}</h1>
-        <button 
-          onClick={() => setActiveLogId('system')} 
-          className="flex items-center justify-center px-4 py-2 bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-white rounded-xl text-sm font-semibold transition-all active:scale-[0.98] w-full sm:w-auto"
-        >
-          <TerminalSquare className="w-4 h-4 mr-2" />
-          {t('dashboard.systemLogs')}
-        </button>
       </div>
       
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
@@ -101,9 +91,6 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {activeLogId && (
-        <LogViewer moduleId={activeLogId} onClose={() => setActiveLogId(null)} />
-      )}
     </div>
   );
 }

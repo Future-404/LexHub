@@ -11,6 +11,9 @@ async function bootstrap(): Promise<void> {
   const { NetworkManager } = await import('./manager/network.js');
   NetworkManager.init();
 
+  const { ModuleManager } = await import('./manager/module.js');
+  ModuleManager.initBuiltInModules();
+
   Logger.info('LexHub v2.0 启动中...', 'Bootstrap');
 
   const args = process.argv.slice(2);

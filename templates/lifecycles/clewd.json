@@ -1,0 +1,24 @@
+{
+  "id": "clewd",
+  "name": "ClewdR (Claude.ai Rust Proxy)",
+  "aliases": ["clewdr"],
+  "version": "1.0.0",
+  "author": "Xerxes-2",
+  "description": "ClewdR 是一个用于 Claude.ai / Claude Code 的 Rust 高性能反向代理程序。它提供 OpenAI 兼容接口，并带有内置的轻量 React Web 管理界面。",
+  "icon": "🦞",
+  "categories": ["AI", "Proxy"],
+  "platforms": ["linux", "termux"],
+  "repo_url": "https://github.com/Xerxes-2/clewdr",
+  "branch": "master",
+  "dependencies": {
+    "binaries": ["curl", "unzip"]
+  },
+  "env": {
+    "PORT": { "default": 8444, "description": "监听端口" },
+    "LISTEN": { "default": "0.0.0.0", "description": "监听地址 (0.0.0.0=公网, 127.0.0.1=仅本机)" }
+  },
+  "port_mapping": {
+    "source": 8444,
+    "target": 8444
+  }
+}

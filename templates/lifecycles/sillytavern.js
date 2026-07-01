@@ -154,10 +154,9 @@ export async function getVersions(ctx) {
   let tags = [];
 
   try {
+    // Check for detached HEAD
     try {
-      // Check for detached HEAD
-      try {
-        const branch = execSync('git symbolic-ref --short HEAD', { cwd: appDir, encoding: 'utf8', stdio: 'pipe' }).trim();
+      const branch = execSync('git symbolic-ref --short HEAD', { cwd: appDir, encoding: 'utf8', stdio: 'pipe' }).trim();
         channel = branch;
         isLocked = false;
       } catch {

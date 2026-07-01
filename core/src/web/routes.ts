@@ -5,6 +5,7 @@ import { SystemManager } from '../manager/system.js';
 import { Logger } from '../manager/logger.js';
 import { MigrateManager } from '../manager/migrate.js';
 import { NetworkManager } from '../manager/network.js';
+import { AdbManager } from '../manager/adb.js';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
@@ -14,6 +15,17 @@ function hashPassword(password: string): string {
   return crypto.createHash('sha256').update(password + 'lexhub_salt_v1').digest('hex');
 }
 
+function handleError(reply: any, err: any): any {
+  const traceId = crypto.randomBytes(4).toString('hex').toUpperCase();
+  Logger.error(`[TraceID: ${traceId}] ${err instanceof Error ? err.stack : String(err)}`, 'WebAPI');
+  return reply.code(500).send({
+    error: 'Internal Server Error',
+    code: 'INTERNAL_SERVER_ERROR',
+    traceId
+  });
+}
+
+
 export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
   // ── Global preHandler for path traversal protection ───────────────
   fastify.addHook('preHandler', async (req, reply) => {
@@ -21,6 +33,49 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
     if (params.id && !/^[a-zA-Z0-9_-]+$/.test(params.id)) {
       reply.code(400).send({ error: 'Invalid module ID format' });
       return reply;
+    }
+
+    // Mutex locking for mutating module operations
+    if (params.id && req.method !== 'GET') {
+      const url = req.url;
+      const backgroundOperations = [
+        '/install',
+        '/update',
+        '/rollback',
+        '/channel',
+        '/unlock',
+        '/restore',
+        '/backup',
+        '/plugins/'
+      ];
+      
+      const isBackground = backgroundOperations.some(op => url.includes(op)) || 
+                           (req.method === 'DELETE' && /^\/api\/modules\/[a-zA-Z0-9_-]+$/.test(url.split('?')[0]));
+
+      if (isBackground) {
+        if (ModuleManager.isOperationRunning(params.id)) {
+          const op = ModuleManager.getRunningOperation(params.id);
+          reply.code(409).send({ error: `模块 ${params.id} 有其他任务 (${op}) 正在后台运行，请稍候再试。` });
+          return reply;
+        }
+
+        // Infer operation name
+        let op = 'write';
+        if (req.method === 'DELETE') {
+          op = url.includes('/plugins/') ? 'uninstallPlugin' : 'uninstall';
+        } else {
+          const parts = url.split('?')[0].split('/');
+          op = parts[parts.length - 1] || 'write';
+        }
+
+        // Acquire lock synchronously to prevent concurrency race conditions
+        try {
+          ModuleManager.acquireLock(params.id, op);
+        } catch (lockErr: any) {
+          reply.code(409).send({ error: lockErr.message || '获取操作锁失败' });
+          return reply;
+        }
+      }
     }
 
     if (req.url.startsWith('/api/') && !req.url.startsWith('/api/auth/')) {
@@ -34,6 +89,25 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
         }
       }
     }
+  });
+
+  // Release acquired operation locks if the request was rejected with non-202 status
+  fastify.addHook('onSend', async (req, reply, payload) => {
+    const params = req.params as { id?: string };
+    if (params.id && reply.statusCode !== 202 && req.method !== 'GET') {
+      const url = req.url;
+      let op = '';
+      if (req.method === 'DELETE') {
+        op = url.includes('/plugins/') ? 'uninstallPlugin' : 'uninstall';
+      } else {
+        const parts = url.split('?')[0].split('/');
+        op = parts[parts.length - 1] || '';
+      }
+      if (op && ModuleManager.getRunningOperation(params.id) === op) {
+        ModuleManager.releaseLock(params.id, op);
+      }
+    }
+    return payload;
   });
 
   // ── Auth ────────────────────────────────────────────────────────────────
@@ -51,6 +125,14 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
     if (settings.adminPasswordHash) return reply.code(403).send({ error: 'Already setup' });
 
     ConfigManager.patchSettings({ adminPasswordHash: hashPassword(password) });
+    const token = await reply.jwtSign({ role: 'admin' }, { expiresIn: '30d' });
+    reply.setCookie('lexhub_auth', token, {
+      domain: settings.gatewayCookieDomain || undefined,
+      path: '/',
+      httpOnly: true,
+      sameSite: 'lax',
+      maxAge: 30 * 24 * 60 * 60
+    });
     return reply.send({ success: true });
   });
 
@@ -92,7 +174,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       return reply.send(res);
     } catch (err) {
       Logger.error(`扫描 TAV-X 遗留数据失败: ${err}`, 'API');
-      return reply.code(500).send({ error: String(err) });
+      return handleError(reply, err);
     }
   });
 
@@ -103,7 +185,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       return reply.send({ success: true, message: `模块 ${id} 迁移成功` });
     } catch (err) {
       Logger.error(`迁移模块 ${id} 失败: ${err}`, 'API');
-      return reply.code(500).send({ error: String(err) });
+      return handleError(reply, err);
     }
   });
 
@@ -145,7 +227,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
         return reply.send({ enabled });
       }
     } catch (err) {
-      return reply.code(500).send({ error: String(err) });
+      return handleError(reply, err);
     }
   });
 
@@ -184,7 +266,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       return reply.send({ message: `模块 ${id} 已启动` });
     } catch (err) {
       Logger.error(`启动模块 ${id} 失败: ${err}`, 'API');
-      return reply.code(500).send({ error: String(err) });
+      return handleError(reply, err);
     }
   });
 
@@ -196,7 +278,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       await ModuleManager.stopModule(id);
       return reply.send({ message: `模块 ${id} 已停止` });
     } catch (err) {
-      return reply.code(500).send({ error: String(err) });
+      return handleError(reply, err);
     }
   });
 
@@ -246,7 +328,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       const result = await ModuleManager.callLifecycle(id, 'getVersions');
       return reply.send(result);
     } catch (err) {
-      return reply.code(500).send({ error: String(err) });
+      return handleError(reply, err);
     }
   });
 
@@ -297,7 +379,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       }
       return reply.send({ config: result, schema });
     } catch (err) {
-      return reply.code(500).send({ error: String(err) });
+      return handleError(reply, err);
     }
   });
 
@@ -308,7 +390,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       await ModuleManager.callLifecycle(id, 'writeAppConfig', body);
       return reply.send({ message: '应用配置已保存' });
     } catch (err) {
-      return reply.code(500).send({ error: String(err) });
+      return handleError(reply, err);
     }
   });
 
@@ -318,7 +400,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       await ModuleManager.callLifecycle(id, 'resetAppConfig');
       return reply.send({ message: '配置已重置' });
     } catch (err) {
-      return reply.code(500).send({ error: String(err) });
+      return handleError(reply, err);
     }
   });
 
@@ -330,7 +412,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       await ModuleManager.callLifecycle(id, 'resetPassword', username, password);
       return reply.send({ message: '密码已重置' });
     } catch (err) {
-      return reply.code(500).send({ error: String(err) });
+      return handleError(reply, err);
     }
   });
 
@@ -350,7 +432,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       const result = await ModuleManager.callLifecycle(id, 'listBackups');
       return reply.send(result);
     } catch (err) {
-      return reply.code(500).send({ error: String(err) });
+      return handleError(reply, err);
     }
   });
 
@@ -361,13 +443,19 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
 
     // Security: prevent path traversal
     const os = await import('os');
-    const allowedBase = path.normalize(path.join(os.default.homedir(), 'LexHub_Backup'));
+    const homeDir = os.default.homedir();
+    const allowedBases = [
+      path.normalize(path.join(homeDir, 'LexHub_Backup')),
+      path.normalize(path.join(homeDir, 'TAVX_Backup')),
+      path.normalize(path.join(homeDir, 'storage', 'downloads', 'TAVX_Backup')),
+      path.normalize(path.join(homeDir, 'storage', 'downloads', 'LexHub_Backup'))
+    ];
     const resolved = path.normalize(path.resolve(backupPath));
     
     const isWin = os.default.platform() === 'win32';
-    const isAllowed = isWin
-      ? resolved.toLowerCase().startsWith(allowedBase.toLowerCase())
-      : resolved.startsWith(allowedBase);
+    const isAllowed = allowedBases.some(base => 
+      isWin ? resolved.toLowerCase().startsWith(base.toLowerCase()) : resolved.startsWith(base)
+    );
 
     if (!isAllowed) {
       return reply.code(403).send({ error: '不允许的备份路径' });
@@ -387,7 +475,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       const result = await ModuleManager.callLifecycle(id, 'getPluginCatalog');
       return reply.send(result);
     } catch (err) {
-      return reply.code(500).send({ error: String(err) });
+      return handleError(reply, err);
     }
   });
 
@@ -412,7 +500,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       await ModuleManager.callLifecycle(id, 'uninstallPlugin', pluginId);
       return reply.send({ message: `插件 ${pluginId} 已卸载` });
     } catch (err) {
-      return reply.code(500).send({ error: String(err) });
+      return handleError(reply, err);
     }
   });
 
@@ -422,7 +510,21 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       await ModuleManager.callLifecycle(id, 'resetAllPlugins');
       return reply.send({ message: '所有插件已重置' });
     } catch (err) {
-      return reply.code(500).send({ error: String(err) });
+      return handleError(reply, err);
+    }
+  });
+
+  // ── Custom Lifecycle Calls ────────────────────────────────────────────────
+
+  fastify.post('/api/modules/:id/call/:method', async (req, reply) => {
+    const { id, method } = req.params as { id: string, method: string };
+    const body = req.body as any; // Allow array or single object arguments
+    try {
+      const args = Array.isArray(body) ? body : (body ? [body] : []);
+      const result = await ModuleManager.callLifecycle(id, method, ...args);
+      return reply.send({ result });
+    } catch (err) {
+      return handleError(reply, err);
     }
   });
 
@@ -434,7 +536,7 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
       await ModuleManager.uninstallModule(id);
       return reply.send({ message: `模块 ${id} 已卸载` });
     } catch (err) {
-      return reply.code(500).send({ error: String(err) });
+      return handleError(reply, err);
     }
   });
 
@@ -474,24 +576,90 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
     return reply.send(NetworkManager.getStatus());
   });
 
+  // ── Custom Ingress ────────────────────────────────────────────────────────
+
+  fastify.get('/api/system/ingress', async (_req, reply) => {
+    const settings = ConfigManager.loadSettings();
+    return reply.send(settings.customIngress || []);
+  });
+
+  fastify.post('/api/system/ingress', async (req, reply) => {
+    const { hostname, targetUrl } = req.body as { hostname: string; targetUrl: string };
+    if (!hostname || !targetUrl) return reply.code(400).send({ error: 'Missing hostname or targetUrl' });
+    
+    try {
+      const settings = ConfigManager.loadSettings();
+      const ingress = settings.customIngress || [];
+      const existing = ingress.findIndex(r => r.hostname === hostname);
+      if (existing >= 0) {
+        ingress[existing].targetUrl = targetUrl;
+      } else {
+        ingress.push({ hostname, targetUrl });
+      }
+      
+      ConfigManager.patchSettings({ customIngress: ingress });
+      
+      // Auto route DNS via cloudflare module
+      try {
+        await ModuleManager.callLifecycle('cloudflare', 'routeDns', { hostname });
+      } catch (err) {
+        Logger.warn(`Failed to route DNS for ${hostname}: ${err}`, 'API');
+      }
+      
+      return reply.send({ message: '自定义路由已保存' });
+    } catch (err) {
+      return handleError(reply, err);
+    }
+  });
+
+  fastify.delete('/api/system/ingress/:hostname', async (req, reply) => {
+    const { hostname } = req.params as { hostname: string };
+    try {
+      const settings = ConfigManager.loadSettings();
+      if (settings.customIngress) {
+        const filtered = settings.customIngress.filter(r => r.hostname !== hostname);
+        ConfigManager.patchSettings({ customIngress: filtered });
+      }
+      return reply.send({ message: '自定义路由已删除' });
+    } catch (err) {
+      return handleError(reply, err);
+    }
+  });
+
   // ── Mirrors ───────────────────────────────────────────────────────────────
 
   fastify.post('/api/system/mirrors', async (req, reply) => {
-    const { action } = req.body as { action: string };
+    const { action, url } = req.body as { action: string; url?: string };
 
     try {
       if (action === 'npm') {
-        execFileSync('npm', ['config', 'set', 'registry', 'https://registry.npmmirror.com']);
-        return reply.send({ message: 'NPM 源已成功切换至 npmmirror' });
+        const targetUrl = url || 'https://registry.npmmirror.com';
+        execFileSync('npm', ['config', 'set', 'registry', targetUrl]);
+        return reply.send({ message: `NPM 源已成功切换至 ${targetUrl}` });
       } else if (action === 'pip') {
-        execFileSync('pip', ['config', 'set', 'global.index-url', 'https://pypi.tuna.tsinghua.edu.cn/simple']);
-        return reply.send({ message: 'PIP 源已切换至清华大学镜像' });
+        const targetUrl = url || 'https://pypi.tuna.tsinghua.edu.cn/simple';
+        execFileSync('pip', ['config', 'set', 'global.index-url', targetUrl]);
+        return reply.send({ message: `PIP 源已切换至 ${targetUrl}` });
       } else if (action === 'system') {
         const platform = SystemManager.getPlatform();
         if (platform === 'termux') {
           const sourcesPath = path.join(process.env.PREFIX || '/data/data/com.termux/files/usr', 'etc/apt/sources.list');
-          execFileSync('sed', ['-i', 's@packages.termux.org@mirrors.tuna.tsinghua.edu.cn/termux@g', sourcesPath]);
-          return reply.send({ message: 'Termux 系统源已成功切换至清华大学镜像' });
+          if (fs.existsSync(sourcesPath)) {
+            let content = fs.readFileSync(sourcesPath, 'utf8');
+            let domain = 'packages.termux.org';
+            if (url === 'tsinghua') domain = 'mirrors.tuna.tsinghua.edu.cn/termux';
+            else if (url === 'aliyun') domain = 'mirrors.aliyun.com/termux';
+            else if (url === 'ustc') domain = 'mirrors.ustc.edu.cn/termux';
+            else if (url === 'bfsu') domain = 'mirrors.bfsu.edu.cn/termux';
+            else if (url === 'default') domain = 'packages.termux.org';
+            else if (url && url.includes('.')) domain = url;
+
+            content = content.replace(/(https?:\/\/)[^\/\s]+(\/apt\/termux-main|\/termux)/g, `$1${domain}`);
+            fs.writeFileSync(sourcesPath, content, 'utf8');
+            return reply.send({ message: `Termux 系统源已成功切换至 ${domain}` });
+          } else {
+            return reply.code(400).send({ error: '未找到 sources.list 配置文件' });
+          }
         } else if (platform === 'linux') {
           return reply.send({ message: 'Linux 请在终端执行: bash <(curl -sSL https://linuxmirrors.cn/main.sh)' });
         } else {
@@ -501,55 +669,61 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
         try { execFileSync('git', ['config', '--global', '--unset', 'http.proxy']); } catch {}
         try { execFileSync('git', ['config', '--global', '--unset', 'https.proxy']); } catch {}
         try { execFileSync('npm', ['config', 'delete', 'registry']); } catch {}
+        try { execFileSync('pip', ['config', 'unset', 'global.index-url']); } catch {}
         return reply.send({ message: '网络设置与代理缓存已重置' });
       }
       return reply.code(400).send({ error: '未知操作' });
     } catch (err) {
-      return reply.code(500).send({ error: String(err) });
+      return handleError(reply, err);
     }
   });
 
-  // ── Store ─────────────────────────────────────────────────────────────────
-
   fastify.get('/api/store/modules', async (_req, reply) => {
     try {
-      // NetworkManager already imported at top of file via static ESM import
       const settings = ConfigManager.loadSettings();
       const storeUrl = NetworkManager.getSmartUrl(settings.storeIndexUrl);
+      let data: any[] = [];
 
       try {
         const res = await NetworkManager.fetch(storeUrl);
         if (res.ok) {
-          const data = await res.json();
-          return reply.send(data);
+          data = await res.json();
         }
       } catch (networkErr) {
         Logger.warn(`无法连接远端商店: ${networkErr}，尝试使用本地内置数据 fallback`, 'API');
       }
 
-      // Fallback for development
-      const fallbackPath = path.join(path.resolve(__dirname, '../../..'), '../lexhub-store/index.json');
-      if (fs.existsSync(fallbackPath)) {
-        const fallbackData = fs.readFileSync(fallbackPath, 'utf-8');
-        return reply.send(JSON.parse(fallbackData));
+      if (!data || data.length === 0) {
+        // Fallback for development
+        const fallbackPath = path.join(path.resolve(__dirname, '../../..'), '../lexhub-store/index.json');
+        if (fs.existsSync(fallbackPath)) {
+          const fallbackData = fs.readFileSync(fallbackPath, 'utf-8');
+          data = JSON.parse(fallbackData);
+        }
       }
 
-      // Production Offline Fallback
-      Logger.warn('Remote store unreachable, using bundled offline store', 'API');
-      return reply.send([
-        {
-          "id": "sillytavern",
-          "name": "SillyTavern",
-          "version": "1.12.0",
-          "author": "SillyTavern Team",
-          "description": "SillyTavern 是一款本地化的大语言模型 (LLM) 角色扮演与聊天前端，专为深度沉浸和高度自定义打造。",
-          "icon": "🎭",
-          "categories": ["AI", "Chat", "Roleplay"],
-          "platforms": ["linux", "windows", "termux"],
-          "repo_url": "https://github.com/SillyTavern/SillyTavern.git",
-          "branch": "release"
-        },
-        {
+      if (!data || data.length === 0) {
+        // Production Offline Fallback
+        Logger.warn('Remote store unreachable, using bundled offline store', 'API');
+        data = [
+          {
+            "id": "sillytavern",
+            "name": "SillyTavern",
+            "version": "1.12.0",
+            "author": "SillyTavern Team",
+            "description": "SillyTavern 是一款本地化的大语言模型 (LLM) 角色扮演与聊天前端，专为深度沉浸和高度自定义打造。",
+            "icon": "🎭",
+            "categories": ["AI", "Chat", "Roleplay"],
+            "platforms": ["linux", "windows", "termux"],
+            "repo_url": "https://github.com/SillyTavern/SillyTavern.git",
+            "branch": "release"
+          }
+        ];
+      }
+
+      // Always inject built-in Cloudflare module if not present in the store listing
+      if (!data.some(m => m.id === 'cloudflare')) {
+        data.push({
           "id": "cloudflare",
           "name": "Cloudflare Zero Trust",
           "version": "1.0.0",
@@ -560,11 +734,144 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
           "platforms": ["linux", "termux", "windows"],
           "repo_url": "",
           "branch": "main"
-        }
-      ]);
+        });
+      }
+
+      // Force ClewdR metadata
+      const clewdIdx = data.findIndex(m => m.id === 'clewd');
+      const clewdMeta = {
+        "id": "clewd",
+        "name": "ClewdR (Rust版)",
+        "version": "1.0.0",
+        "author": "Xerxes-2",
+        "description": "ClewdR 是一个用于 Claude.ai / Claude Code 的 Rust 高性能反向代理程序。它提供 OpenAI 兼容接口，并带有内置的轻量 React Web 管理界面。",
+        "icon": "🦞",
+        "categories": ["AI", "Proxy"],
+        "platforms": ["linux", "termux"],
+        "repo_url": "https://github.com/Xerxes-2/clewdr.git",
+        "branch": "master"
+      };
+      if (clewdIdx >= 0) {
+        data[clewdIdx] = clewdMeta;
+      } else {
+        data.push(clewdMeta);
+      }
+
+      // Inject cliproxyapi
+      if (!data.some(m => m.id === 'cliproxyapi')) {
+        data.push({
+          "id": "cliproxyapi",
+          "name": "CLIProxyAPI 代理",
+          "version": "1.0.0",
+          "author": "router-for-me",
+          "description": "CLIProxyAPI 是一个由 Go 编写的高性能代理工具，支持远程管理和 WebUI 后台，非常适合在手机端作为代理中转使用。",
+          "icon": "⚡",
+          "categories": ["AI", "Proxy"],
+          "platforms": ["linux", "termux"],
+          "repo_url": "https://github.com/router-for-me/CLIProxyAPI.git",
+          "branch": "main"
+        });
+      }
+
+      // Inject gcli2api
+      if (!data.some(m => m.id === 'gcli2api')) {
+        data.push({
+          "id": "gcli2api",
+          "name": "GCLI2API",
+          "version": "1.0.0",
+          "author": "su-kaka",
+          "description": "GCLI2API 用于将 GeminiCLI 和 Antigravity 转换为 OpenAI、GEMINI 和 Claude API 兼容接口，方便客户端接入使用。",
+          "icon": "🌐",
+          "categories": ["AI", "Proxy"],
+          "platforms": ["linux", "termux"],
+          "repo_url": "https://github.com/su-kaka/gcli2api.git",
+          "branch": "master"
+        });
+      }
+
+      return reply.send(data);
     } catch (err) {
       Logger.error(`获取远端商店列表失败: ${err}`, 'API');
-      return reply.code(500).send({ error: String(err) });
+      return handleError(reply, err);
+    }
+  });
+
+  // ── ADB & Keepalive ───────────────────────────────────────────────────────
+
+  fastify.get('/api/system/adb/status', async (_req, reply) => {
+    try {
+      return reply.send(AdbManager.getStatus());
+    } catch (err) {
+      return handleError(reply, err);
+    }
+  });
+
+  fastify.post('/api/system/adb/install', async (_req, reply) => {
+    try {
+      await AdbManager.installAdb();
+      return reply.send({ success: true, message: 'ADB 安装完成' });
+    } catch (err) {
+      return handleError(reply, err);
+    }
+  });
+
+  fastify.post('/api/system/adb/pair', async (req, reply) => {
+    const { host, code } = req.body as { host: string; code: string };
+    if (!host || !code) {
+      return reply.code(400).send({ error: '缺少主机端口 (host) 或配对码 (code)' });
+    }
+    try {
+      AdbManager.pairDevice(host, code);
+      return reply.send({ success: true, message: '配对指令执行成功' });
+    } catch (err) {
+      return handleError(reply, err);
+    }
+  });
+
+  fastify.post('/api/system/adb/connect', async (req, reply) => {
+    const { host } = req.body as { host: string };
+    if (!host) {
+      return reply.code(400).send({ error: '缺少主机端口 (host)' });
+    }
+    try {
+      AdbManager.connectDevice(host);
+      return reply.send({ success: true, message: '连接指令执行成功' });
+    } catch (err) {
+      return handleError(reply, err);
+    }
+  });
+
+  fastify.post('/api/system/adb/optimize', async (req, reply) => {
+    const { mode } = req.body as { mode: 'universal' | 'aggressive' };
+    try {
+      if (mode === 'aggressive') {
+        const msg = AdbManager.applyVendorFixes();
+        return reply.send({ success: true, message: msg });
+      } else {
+        AdbManager.applyUniversalFixes();
+        return reply.send({ success: true, message: '通用保活优化策略应用完成' });
+      }
+    } catch (err) {
+      return handleError(reply, err);
+    }
+  });
+
+  fastify.post('/api/system/adb/heartbeat', async (req, reply) => {
+    const { enable } = req.body as { enable: boolean };
+    try {
+      AdbManager.toggleAudioHeartbeat(enable);
+      return reply.send({ success: true, message: enable ? '音频心跳已开启' : '音频心跳已关闭' });
+    } catch (err) {
+      return handleError(reply, err);
+    }
+  });
+
+  fastify.post('/api/system/adb/rollback', async (_req, reply) => {
+    try {
+      AdbManager.revertOptimizations();
+      return reply.send({ success: true, message: '所有保活优化参数已撤销' });
+    } catch (err) {
+      return handleError(reply, err);
     }
   });
 }

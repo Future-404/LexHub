@@ -17,6 +17,7 @@ const resources = {
         logs: "Logs",
         settings: "Settings",
         status: "Status",
+        error: "An error occurred",
         cancel: "Cancel",
         save: "Save Config",
         saving: "Saving...",

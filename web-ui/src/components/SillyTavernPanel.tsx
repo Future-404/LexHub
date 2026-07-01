@@ -5,10 +5,11 @@ import {
   Play, Square, Download, RefreshCw, GitBranch, Archive, RotateCcw,
   Settings, Puzzle, KeyRound,
   Trash2, X, ChevronRight, ChevronDown, CheckCircle2, AlertCircle,
-  Loader2, HistoryIcon, Lock, Unlock
+  Loader2, HistoryIcon, Lock, Unlock, Globe, ShieldCheck
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { ModuleInfo } from './Dashboard';
+import DangerModal from './DangerModal';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -34,6 +35,7 @@ interface BackupEntry {
   path: string;
   size: number;
   mtime: string;
+  source?: string;
 }
 
 interface AppConfigSchema {
@@ -95,6 +97,58 @@ function AppConfigPanel({ moduleId }: { moduleId: string }) {
   const [localConfig, setLocalConfig] = useState<Record<string, unknown>>({});
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+  const [showPublicSetup, setShowPublicSetup] = useState(false);
+  const [publicPassword, setPublicPassword] = useState('');
+  const [publicLoading, setPublicLoading] = useState(false);
+
+  const isPublicAccessEnabled = 
+    localConfig.listen === true && 
+    localConfig.enableUserAccounts === true;
+
+  const handleEnablePublicAccess = async () => {
+    if (!publicPassword) return;
+    setPublicLoading(true);
+    setMsg(null);
+    try {
+      const patch = {
+        "listen": true,
+        "whitelistMode": false,
+        "enableUserAccounts": true,
+        "enableDiscreetLogin": true,
+        "basicAuthMode": false
+      };
+      
+      let r = await fetch(`/api/modules/${moduleId}/app-config`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      });
+      if (!r.ok) throw new Error(await r.text());
+
+      r = await fetch(`/api/modules/${moduleId}/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: 'default-user', password: publicPassword }),
+      });
+      if (!r.ok) throw new Error(await r.text());
+
+      setMsg({ type: 'ok', text: '正在重启酒馆以应用安全公网配置...' });
+      await fetch(`/api/modules/${moduleId}/stop`, { method: 'POST' });
+      await fetch(`/api/modules/${moduleId}/start`, { method: 'POST' });
+
+      setLocalConfig(prev => ({
+        ...prev,
+        ...patch
+      }));
+      setShowPublicSetup(false);
+      setPublicPassword('');
+      setMsg({ type: 'ok', text: '安全公网访问已成功开启！您的酒馆已绑定至 0.0.0.0:8000，且已启用多用户密码隔离系统。' });
+    } catch (e: any) {
+      setMsg({ type: 'err', text: e.message || '开启失败' });
+    } finally {
+      setPublicLoading(false);
+    }
+  };
 
   useEffect(() => {
     fetch(`/api/modules/${moduleId}/app-config`)
@@ -159,6 +213,61 @@ function AppConfigPanel({ moduleId }: { moduleId: string }) {
 
   return (
     <div className="space-y-4">
+      {/* One-click Public Access Banner & Form */}
+      {!isPublicAccessEnabled && (
+        <div className="glass-panel p-5 rounded-2xl border border-amber-500/20 dark:border-amber-500/10 bg-amber-500/5 dark:bg-amber-500/5 space-y-4">
+          <div className="flex items-start gap-3">
+            <Globe className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <h4 className="text-sm font-bold text-amber-600 dark:text-amber-400">一键开启安全公网访问</h4>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 leading-relaxed">
+                自动将监听地址改为 0.0.0.0（允许公网访问），关闭 IP 白名单，并<strong>强制启用多用户密码隔离系统</strong>，确保您的公网酒馆不会被裸奔扫描。
+              </p>
+            </div>
+          </div>
+
+          {!showPublicSetup ? (
+            <button
+              onClick={() => setShowPublicSetup(true)}
+              className="w-full py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-semibold transition-all shadow-sm flex items-center justify-center gap-1.5"
+            >
+              <ShieldCheck className="w-3.5 h-3.5" /> 一键开启安全公网
+            </button>
+          ) : (
+            <div className="space-y-3 pt-3 border-t border-zinc-150 dark:border-zinc-800/60">
+              <div className="text-xs text-zinc-600 dark:text-zinc-400">
+                请为管理员账号 <span className="font-semibold text-zinc-800 dark:text-zinc-200">default-user</span> 设置一个安全的公网登录密码：
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="password"
+                  placeholder="请输入新密码"
+                  value={publicPassword}
+                  onChange={e => setPublicPassword(e.target.value)}
+                  className="flex-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-2 text-xs focus:ring-2 focus:ring-amber-500 outline-none text-zinc-900 dark:text-zinc-100"
+                  disabled={publicLoading}
+                />
+                <button
+                  onClick={handleEnablePublicAccess}
+                  disabled={publicLoading || !publicPassword}
+                  className="px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white rounded-xl text-xs font-semibold shrink-0 transition-all flex items-center gap-1"
+                >
+                  {publicLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                  确认开启
+                </button>
+                <button
+                  onClick={() => { setShowPublicSetup(false); setPublicPassword(''); }}
+                  disabled={publicLoading}
+                  className="px-3 py-2 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 rounded-xl text-xs font-semibold transition-all"
+                >
+                  取消
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Category tabs */}
       <div className="flex flex-wrap gap-2">
         {categories.map(([key, cat]) => (
@@ -272,11 +381,15 @@ function VersionPanel({ moduleId }: { moduleId: string }) {
     setBusy(url);
     setMsg(null);
     try {
-      await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+      const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+      if (!r.ok) {
+        const data = await r.json().catch(() => ({}));
+        throw new Error(data.error || '操作失败');
+      }
       setMsg('操作已触发，请查看系统日志了解进度...');
       setTimeout(refresh, 3000);
-    } catch {
-      setMsg('操作失败');
+    } catch (e: any) {
+      setMsg(e.message || '操作失败');
     } finally {
       setBusy(null);
     }
@@ -374,34 +487,42 @@ function BackupPanel({ moduleId }: { moduleId: string }) {
   const { data: backups, mutate } = useSWR<BackupEntry[]>(`/api/modules/${moduleId}/backups`, fetcher);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+  const [restorePath, setRestorePath] = useState<string | null>(null);
 
   const doBackup = async () => {
     setBusy(true);
     setMsg(null);
     try {
-      await fetch(`/api/modules/${moduleId}/backup`, { method: 'POST' });
+      const r = await fetch(`/api/modules/${moduleId}/backup`, { method: 'POST' });
+      if (!r.ok) {
+        const data = await r.json().catch(() => ({}));
+        throw new Error(data.error || '备份失败');
+      }
       setMsg({ type: 'ok', text: '备份任务已启动，请稍候查看日志...' });
       setTimeout(() => mutate(), 3000);
-    } catch {
-      setMsg({ type: 'err', text: '备份失败' });
+    } catch (e: any) {
+      setMsg({ type: 'err', text: e.message || '备份失败' });
     } finally {
       setBusy(false);
     }
   };
 
-  const doRestore = async (backupPath: string) => {
-    if (!confirm('确认要恢复此备份？当前的聊天数据将被覆盖！')) return;
+  const executeRestore = async (backupPath: string) => {
     setBusy(true);
     setMsg(null);
     try {
-      await fetch(`/api/modules/${moduleId}/restore`, {
+      const r = await fetch(`/api/modules/${moduleId}/restore`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ backupPath }),
       });
+      if (!r.ok) {
+        const data = await r.json().catch(() => ({}));
+        throw new Error(data.error || '恢复失败');
+      }
       setMsg({ type: 'ok', text: '恢复任务已启动，完成后请重启服务！' });
-    } catch {
-      setMsg({ type: 'err', text: '恢复失败' });
+    } catch (e: any) {
+      setMsg({ type: 'err', text: e.message || '恢复失败' });
     } finally {
       setBusy(false);
     }
@@ -438,11 +559,21 @@ function BackupPanel({ moduleId }: { moduleId: string }) {
           backups.map(b => (
             <div key={b.filename} className="flex items-center justify-between p-3 bg-zinc-50 dark:bg-zinc-900/60 rounded-xl border border-zinc-200 dark:border-zinc-800">
               <div className="min-w-0 flex-1">
-                <div className="text-xs font-mono truncate">{b.filename}</div>
-                <div className="text-[11px] text-zinc-500">{formatSize(b.size)} · {new Date(b.mtime).toLocaleString()}</div>
+                <div className="flex items-center gap-2">
+                  <div className="text-xs font-mono truncate">{b.filename}</div>
+                  {b.source && (
+                    <span className={cn(
+                      'px-1.5 py-0.5 rounded-[4px] text-[9px] font-bold uppercase tracking-wider',
+                      b.source.includes('TAVX') ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20' : 'bg-zinc-200/50 dark:bg-zinc-800 text-zinc-500 border border-zinc-300 dark:border-zinc-700'
+                    )}>
+                      {b.source}
+                    </span>
+                  )}
+                </div>
+                <div className="text-[11px] text-zinc-500 mt-0.5">{formatSize(b.size)} · {new Date(b.mtime).toLocaleString()}</div>
               </div>
               <button
-                onClick={() => doRestore(b.path)}
+                onClick={() => setRestorePath(b.filename)} // We show filename in confirm input
                 disabled={busy}
                 className="ml-3 shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-xs font-semibold hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors disabled:opacity-50"
               >
@@ -453,6 +584,25 @@ function BackupPanel({ moduleId }: { moduleId: string }) {
           ))
         )}
       </div>
+
+      <DangerModal
+        isOpen={!!restorePath}
+        title="确认恢复备份"
+        description={`警告：您即将恢复备份 "${restorePath}"！这将会覆盖当前酒馆中所有最新的聊天记录、设置和本地数据。未备份的聊天修改将彻底丢失，该操作不可逆！`}
+        actionText="确认覆盖恢复"
+        confirmWord="RESTORE"
+        isLoading={busy}
+        onConfirm={async () => {
+          if (!restorePath) return;
+          // Find path from backups matching filename
+          const b = backups?.find(item => item.filename === restorePath);
+          if (b) {
+            await executeRestore(b.path);
+          }
+          setRestorePath(null);
+        }}
+        onClose={() => setRestorePath(null)}
+      />
     </div>
   );
 }
@@ -463,16 +613,22 @@ function PluginPanel({ moduleId }: { moduleId: string }) {
   const { data: plugins, mutate } = useSWR<PluginEntry[]>(`/api/modules/${moduleId}/plugins`, fetcher, { refreshInterval: 0 });
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
 
   const install = async (pluginId: string) => {
     setBusy(pluginId);
     setMsg(null);
     try {
-      await fetch(`/api/modules/${moduleId}/plugins/${pluginId}/install`, { method: 'POST' });
+      const r = await fetch(`/api/modules/${moduleId}/plugins/${pluginId}/install`, { method: 'POST' });
+      if (!r.ok) {
+        const data = await r.json().catch(() => ({}));
+        throw new Error(data.error || '安装失败');
+      }
       setMsg(`插件安装任务已提交，完成后请重启服务`);
       setTimeout(() => mutate(), 2000);
-    } catch {
-      setMsg('安装失败');
+    } catch (e: any) {
+      setMsg(e.message || '安装失败');
     } finally {
       setBusy(null);
     }
@@ -481,18 +637,37 @@ function PluginPanel({ moduleId }: { moduleId: string }) {
   const uninstall = async (pluginId: string) => {
     if (!confirm('确认卸载该插件？')) return;
     setBusy(pluginId);
+    setMsg(null);
     try {
-      await fetch(`/api/modules/${moduleId}/plugins/${pluginId}`, { method: 'DELETE' });
+      const r = await fetch(`/api/modules/${moduleId}/plugins/${pluginId}`, { method: 'DELETE' });
+      if (!r.ok) {
+        const data = await r.json().catch(() => ({}));
+        throw new Error(data.error || '卸载失败');
+      }
       mutate();
+    } catch (e: any) {
+      setMsg(e.message || '卸载失败');
     } finally {
       setBusy(null);
     }
   };
 
-  const resetAll = async () => {
-    if (!confirm('这将删除所有第三方扩展！确认？')) return;
-    await fetch(`/api/modules/${moduleId}/plugins/reset`, { method: 'POST' });
-    mutate();
+  const executeResetAll = async () => {
+    setResetLoading(true);
+    setMsg(null);
+    try {
+      const r = await fetch(`/api/modules/${moduleId}/plugins/reset`, { method: 'POST' });
+      if (!r.ok) {
+        const data = await r.json().catch(() => ({}));
+        throw new Error(data.error || '重置失败');
+      }
+      setMsg('所有第三方扩展已成功清除！');
+      mutate();
+    } catch (e: any) {
+      setMsg(e.message || '重置失败');
+    } finally {
+      setResetLoading(false);
+    }
   };
 
   return (
@@ -536,12 +711,26 @@ function PluginPanel({ moduleId }: { moduleId: string }) {
       </div>
 
       <button
-        onClick={resetAll}
+        onClick={() => setShowResetConfirm(true)}
         className="w-full flex items-center justify-center gap-2 py-2.5 text-red-500 bg-red-50 dark:bg-red-500/10 hover:bg-red-100 dark:hover:bg-red-500/20 rounded-xl border border-red-200 dark:border-red-500/30 text-sm font-medium transition-colors"
       >
         <Trash2 className="w-4 h-4" />
         重置所有第三方扩展
       </button>
+
+      <DangerModal
+        isOpen={showResetConfirm}
+        title="确认重置所有插件"
+        description="警告：您即将删除在酒馆中安装的所有第三方扩展插件！此操作将清空公网/本地的所有第三方扩展插件目录，且此操作不可逆！"
+        actionText="确认清除全部插件"
+        confirmWord="RESET"
+        isLoading={resetLoading}
+        onConfirm={async () => {
+          await executeResetAll();
+          setShowResetConfirm(false);
+        }}
+        onClose={() => setShowResetConfirm(false)}
+      />
     </div>
   );
 }
@@ -597,6 +786,79 @@ function PasswordPanel({ moduleId }: { moduleId: string }) {
   );
 }
 
+// ── Network Panel (Gateway Config) ──────────────────────────────────────────
+
+function NetworkPanel({ module, onSaved }: { module: ModuleInfo; onSaved?: () => void }) {
+  const [config, setConfig] = useState<Record<string, unknown>>(module.config || {});
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+
+  const save = async () => {
+    setSaving(true);
+    setMsg(null);
+    try {
+      const r = await fetch(`/api/modules/${module.id}/config`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config)
+      });
+      if (!r.ok) throw new Error('保存失败');
+      setMsg({ type: 'ok', text: '网络与网关配置已保存生效！' });
+      if (onSaved) onSaved();
+    } catch (e: any) {
+      setMsg({ type: 'err', text: e.message });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="p-4 bg-blue-50 dark:bg-blue-500/5 border border-blue-100 dark:border-blue-500/20 rounded-xl">
+        <h4 className="text-sm font-semibold flex items-center mb-1 text-blue-700 dark:text-blue-400">
+          <Globe className="w-4 h-4 mr-1.5" /> 零信任公网访问 (Zero Trust Proxy)
+        </h4>
+        <p className="text-xs text-blue-600/80 dark:text-blue-400/80 leading-relaxed mb-4">
+          当且仅当启动了 Cloudflare 核心引擎，且设置了有效的域名时，LexHub 将自动为您完成内网穿透与反向代理。
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">外网域名 (publicHost)</label>
+            <input 
+              type="text" 
+              value={(config.publicHost as string) || ''} 
+              onChange={e => setConfig({...config, publicHost: e.target.value})} 
+              placeholder="例如: tavern.myhome.com" 
+              className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 transition-shadow outline-none"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">本地端口 (publicPort)</label>
+            <input 
+              type="number" 
+              value={(config.publicPort as number) || ''} 
+              onChange={e => setConfig({...config, publicPort: Number(e.target.value)})} 
+              placeholder="8000" 
+              className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 transition-shadow outline-none"
+            />
+          </div>
+        </div>
+      </div>
+
+      {msg && (
+        <div className={cn('flex items-center gap-2 p-3 rounded-xl text-xs', msg.type === 'ok' ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400')}>
+          {msg.text}
+        </div>
+      )}
+
+      <button onClick={save} disabled={saving} className="w-full flex items-center justify-center py-2.5 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-xl text-sm font-semibold hover:bg-zinc-800 transition-all disabled:opacity-50">
+        {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+        保存网络配置
+      </button>
+    </div>
+  );
+}
+
 // ── Main SillyTavern Detail Panel ─────────────────────────────────────────────
 
 interface Props {
@@ -610,7 +872,8 @@ export default function SillyTavernPanel({ module, onClose, onAction, loadingAct
   const isRunning = module.status === 'RUNNING';
 
   const sections = [
-    { key: 'app-config', label: 'SillyTavern 配置', icon: <Settings className="w-4 h-4 text-blue-500" />, content: <AppConfigPanel moduleId={module.id} /> },
+    { key: 'network', label: '网络与域名网关', icon: <Globe className="w-4 h-4 text-blue-500" />, content: <NetworkPanel module={module} /> },
+    { key: 'app-config', label: 'SillyTavern 配置', icon: <Settings className="w-4 h-4 text-zinc-500" />, content: <AppConfigPanel moduleId={module.id} /> },
     { key: 'versions', label: '版本管理', icon: <GitBranch className="w-4 h-4 text-purple-500" />, content: <VersionPanel moduleId={module.id} /> },
     { key: 'plugins', label: '插件管理', icon: <Puzzle className="w-4 h-4 text-amber-500" />, content: <PluginPanel moduleId={module.id} /> },
     { key: 'backup', label: '备份与恢复', icon: <Archive className="w-4 h-4 text-emerald-500" />, content: <BackupPanel moduleId={module.id} /> },

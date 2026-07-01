@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { execFileSync } from 'child_process';
+import { execSync } from 'child_process';
 import YAML from 'yaml';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -34,29 +34,6 @@ function setNestedValue(obj, keyPath, value) {
     cur = cur[keys[i]];
   }
   cur[keys[keys.length - 1]] = value;
-}
-
-/**
- * Validate that a URL returned by network.getSmartUrl is a safe git remote.
- * Only https:// and http:// protocols are allowed; reject anything else
- * to prevent argument injection via malicious URL schemes.
- */
-function validateGitUrl(url) {
-  if (!/^https?:\/\//i.test(url)) {
-    throw new Error(`不安全的 Git URL: ${url}。仅允许 https:// 协议。`);
-  }
-  return url;
-}
-
-/**
- * Validate git ref names (branch, tag) to prevent injection.
- * Only alphanumeric, dots, hyphens, underscores, and slashes are allowed.
- */
-function validateGitRef(ref) {
-  if (!/^[a-zA-Z0-9._\/-]+$/.test(ref)) {
-    throw new Error(`非法的 Git 引用名称: ${ref}`);
-  }
-  return ref;
 }
 
 // ── Install ──────────────────────────────────────────────────────────────────
@@ -145,13 +122,13 @@ export async function update(ctx) {
 
   // Check if HEAD is detached (version-locked)
   try {
-    execFileSync('git', ['symbolic-ref', 'HEAD'], { cwd: appDir, stdio: 'pipe' });
+    execSync('git symbolic-ref HEAD', { cwd: appDir, stdio: 'pipe' });
   } catch {
     throw new Error('当前版本已锁定 (detached HEAD)，请先在版本管理中解锁再更新');
   }
 
   logger.info('正在拉取最新 release 代码...');
-  const repoUrl = validateGitUrl(network.getSmartUrl('https://github.com/SillyTavern/SillyTavern.git'));
+  const repoUrl = network.getSmartUrl('https://github.com/SillyTavern/SillyTavern.git');
   await execCmd('git', ['fetch', '--autostash', repoUrl, 'release'], { cwd: appDir });
   await execCmd('git', ['reset', '--hard', 'FETCH_HEAD'], { cwd: appDir });
   logger.success('代码更新完成');
@@ -179,15 +156,15 @@ export async function getVersions(ctx) {
   try {
     // Check for detached HEAD
     try {
-      const branch = execFileSync('git', ['symbolic-ref', '--short', 'HEAD'], { cwd: appDir, encoding: 'utf8', stdio: 'pipe' }).trim();
-      channel = branch;
-      isLocked = false;
+      const branch = execSync('git symbolic-ref --short HEAD', { cwd: appDir, encoding: 'utf8', stdio: 'pipe' }).trim();
+        channel = branch;
+        isLocked = false;
       } catch {
         try {
-          const tag = execFileSync('git', ['describe', '--tags', '--exact-match'], { cwd: appDir, encoding: 'utf8', stdio: 'pipe' }).trim();
+          const tag = execSync('git describe --tags --exact-match', { cwd: appDir, encoding: 'utf8', stdio: 'pipe' }).trim();
           current = tag;
         } catch {
-          const hash = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: appDir, encoding: 'utf8', stdio: 'pipe' }).trim();
+          const hash = execSync('git rev-parse --short HEAD', { cwd: appDir, encoding: 'utf8', stdio: 'pipe' }).trim();
           current = hash;
         }
         isLocked = true;
@@ -195,7 +172,7 @@ export async function getVersions(ctx) {
 
       // Get available tags (last 20)
       try {
-        const tagOutput = execFileSync('git', ['tag', '--sort=-v:refname'], {
+        const tagOutput = execSync('git tag --sort=-v:refname', {
           cwd: appDir, encoding: 'utf8', stdio: 'pipe'
         }).trim();
         tags = tagOutput ? tagOutput.split('\n').filter(Boolean).slice(0, 20) : [];
@@ -205,9 +182,9 @@ export async function getVersions(ctx) {
 
     if (!current) {
       try {
-        current = execFileSync('git', ['describe', '--tags', '--abbrev=0'], { cwd: appDir, encoding: 'utf8', stdio: 'pipe' }).trim();
+        current = execSync('git describe --tags --abbrev=0', { cwd: appDir, encoding: 'utf8', stdio: 'pipe' }).trim();
       } catch {
-        current = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: appDir, encoding: 'utf8', stdio: 'pipe' }).trim();
+        current = execSync('git rev-parse --short HEAD', { cwd: appDir, encoding: 'utf8', stdio: 'pipe' }).trim();
       }
     }
   } catch (err) {
@@ -239,9 +216,8 @@ export async function switchChannel(ctx, channel) {
   const { paths, execCmd, logger, network } = ctx;
   const { appDir } = paths;
 
-  validateGitRef(channel);
   logger.info(`正在切换到 ${channel} 通道...`);
-  const repoUrl = validateGitUrl(network.getSmartUrl('https://github.com/SillyTavern/SillyTavern.git'));
+  const repoUrl = network.getSmartUrl('https://github.com/SillyTavern/SillyTavern.git');
   await execCmd('git', ['fetch', '--depth=1', repoUrl, channel], { cwd: appDir });
   await execCmd('git', ['checkout', channel], { cwd: appDir });
   await execCmd('git', ['reset', '--hard', 'FETCH_HEAD'], { cwd: appDir });
@@ -256,7 +232,7 @@ export async function unlock(ctx) {
   const { appDir } = paths;
 
   logger.info('正在解锁版本，切换回 release 通道...');
-  const repoUrl = validateGitUrl(network.getSmartUrl('https://github.com/SillyTavern/SillyTavern.git'));
+  const repoUrl = network.getSmartUrl('https://github.com/SillyTavern/SillyTavern.git');
   await execCmd('git', ['fetch', '--depth=1', repoUrl, 'release'], { cwd: appDir });
   await execCmd('git', ['checkout', 'release'], { cwd: appDir });
   await execCmd('git', ['reset', '--hard', 'FETCH_HEAD'], { cwd: appDir });

@@ -28,8 +28,8 @@ export class SystemManager {
    */
   static hasBinary(binaryName: string): boolean {
     const isWin = os.platform() === 'win32';
-    const command = isWin ? 'where' : 'command';
-    const args = isWin ? [binaryName] : ['-v', binaryName];
+    const command = isWin ? 'where' : 'sh';
+    const args = isWin ? [binaryName] : ['-c', `command -v ${binaryName}`];
     try {
       const res = spawnSync(command, args, { stdio: 'ignore' });
       if (res.status === 0) return true;

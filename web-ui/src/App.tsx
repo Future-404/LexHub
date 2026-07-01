@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { Routes, Route, NavLink } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { LayoutDashboard, Package, Settings, Moon, Sun, Languages, Menu, X } from 'lucide-react';
+import { LayoutDashboard, Package, Settings, Moon, Sun, Languages, Menu, X, TerminalSquare, Cloud } from 'lucide-react';
 import { useAppStore } from './store';
 import { cn } from './lib/utils';
 import Dashboard from './components/Dashboard';
 import Modules from './components/Modules';
+import LogViewer from './components/LogViewer';
+import CloudflareView from './components/CloudflareView';
 
 // ── Layout Component ────────────────────────────────────────────────────────
 
@@ -13,6 +15,7 @@ function Layout({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation();
   const { theme, toggleTheme, language, setLanguage } = useAppStore();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [showSystemLogs, setShowSystemLogs] = useState(false);
 
   const toggleLang = () => {
     if (language === 'zh') setLanguage('zh-TW');
@@ -64,10 +67,22 @@ function Layout({ children }: { children: React.ReactNode }) {
             <Package className="w-4 h-4 mr-3" />
             {t('nav.modules')}
           </NavLink>
+          <NavLink to="/cloudflare" onClick={() => setSidebarOpen(false)} className={navLinkClass}>
+            <Cloud className="w-4 h-4 mr-3" />
+            {t('nav.cloudflare', 'CF 穿透')}
+          </NavLink>
           <NavLink to="/settings" onClick={() => setSidebarOpen(false)} className={navLinkClass}>
             <Settings className="w-4 h-4 mr-3" />
             {t('nav.settings')}
           </NavLink>
+          
+          <button 
+            onClick={() => { setShowSystemLogs(true); setSidebarOpen(false); }} 
+            className="w-full flex items-center px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 hover:bg-zinc-50 dark:hover:bg-zinc-800/30"
+          >
+            <TerminalSquare className="w-4 h-4 mr-3" />
+            {t('dashboard.systemLogs', '系统日志')}
+          </button>
         </nav>
 
         <div className="p-4 border-t border-zinc-200 dark:border-zinc-800/60 flex items-center justify-between">
@@ -109,6 +124,10 @@ function Layout({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       </main>
+
+      {showSystemLogs && (
+        <LogViewer moduleId="system" onClose={() => setShowSystemLogs(false)} />
+      )}
     </div>
   );
 }
@@ -141,6 +160,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Dashboard />} />
         <Route path="/modules" element={<Modules />} />
+        <Route path="/cloudflare" element={<CloudflareView />} />
         <Route path="/settings" element={<SettingsView />} />
         <Route path="*" element={<NotFound />} />
       </Routes>

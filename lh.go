@@ -71,7 +71,16 @@ func runCmd(dir string, name string, args ...string) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
-	cmd.Env = append(os.Environ(), "DEBIAN_FRONTEND=noninteractive")
+	
+	env := append(os.Environ(), "DEBIAN_FRONTEND=noninteractive")
+	if isTermux() && os.Getenv("SVDIR") == "" {
+		prefix := os.Getenv("PREFIX")
+		if prefix == "" {
+			prefix = "/data/data/com.termux/files/usr"
+		}
+		env = append(env, "SVDIR=" + filepath.Join(prefix, "var", "service"))
+	}
+	cmd.Env = env
 	return cmd.Run()
 }
 
@@ -302,6 +311,8 @@ func installOrUpdate(lexHubDir string, isUpdate bool) {
 		printError("构建 Web UI 前端代码失败：%v", err)
 		return
 	}
+
+	downloadCloudflared(lexHubDir, bestUrl)
 
 	injectShellAlias(lexHubDir)
 	printPostInstallGuide(lexHubDir)
@@ -639,7 +650,7 @@ func enableAutostart(lexHubDir string) {
 		
 		if _, err := exec.LookPath("sv"); err != nil {
 			printInfo("正在为您自动安装 termux-services...")
-			runCmd("", "pkg", "install", "-y", "termux-services")
+			installTermuxPackage("termux-services")
 		}
 
 		prefix := os.Getenv("PREFIX")
@@ -932,4 +943,135 @@ func main() {
 	default:
 		forwardCommand(lexHubDir, os.Args[1:])
 	}
+}
+
+func downloadCloudflared(lexHubDir string, bestUrl string) {
+	printInfo("正在配置 Cloudflare 穿透网关依赖...")
+	
+	// Check if Termux
+	isTermux := false
+	if prefix := os.Getenv("PREFIX"); prefix != "" && strings.Contains(prefix, "com.termux") {
+		isTermux = true
+	}
+	if _, err := exec.LookPath("termux-setup-storage"); err == nil {
+		isTermux = true
+	}
+
+	if isTermux {
+		printInfo("检测到 Termux 环境，正在检查/安装 cloudflared...")
+		if _, err := exec.LookPath("cloudflared"); err == nil {
+			printSuccess("Termux 环境下的 cloudflared 已安装。")
+			return
+		}
+		if err := installTermuxPackage("cloudflared"); err != nil {
+			printWarn("安装 cloudflared 失败，请尝试在 Termux 手动运行 'pkg install cloudflared'：%v", err)
+		} else {
+			printSuccess("Termux 环境下的 cloudflared 安装成功！")
+		}
+		return
+	}
+
+	// For standard platforms, download to modules/cloudflare/app/bin/
+	cfBinDir := filepath.Join(lexHubDir, "modules", "cloudflare", "app", "bin")
+	if err := os.MkdirAll(cfBinDir, 0755); err != nil {
+		printError("创建 Cloudflare 依赖目录失败：%v", err)
+		return
+	}
+
+	ext := ""
+	if runtime.GOOS == "windows" {
+		ext = ".exe"
+	}
+	cfBinPath := filepath.Join(cfBinDir, "cloudflared"+ext)
+
+	// Check if already exists
+	if _, err := os.Stat(cfBinPath); err == nil {
+		printSuccess("检测到 cloudflared 引擎已安装。")
+		return
+	}
+
+	// Determine platform and architecture
+	goos := runtime.GOOS
+	goarch := runtime.GOARCH
+	
+	dlOS := goos
+	if dlOS == "darwin" {
+		dlOS = "darwin"
+	} else if dlOS == "windows" {
+		dlOS = "windows"
+	} else {
+		dlOS = "linux"
+	}
+
+	dlArch := "amd64"
+	if goarch == "arm64" || goarch == "aarch64" {
+		dlArch = "arm64"
+	} else if goarch == "arm" {
+		dlArch = "arm"
+	}
+
+	filename := fmt.Sprintf("cloudflared-%s-%s%s", dlOS, dlArch, ext)
+	if dlOS == "windows" {
+		filename = fmt.Sprintf("cloudflared-windows-%s.exe", dlArch)
+	} else if dlOS == "darwin" {
+		filename = "cloudflared-darwin-amd64"
+	}
+	
+	rawUrl := fmt.Sprintf("https://github.com/cloudflare/cloudflared/releases/latest/download/%s", filename)
+	
+	// Rewrite URL with mirror prefix if applicable
+	mirrorPrefix := ""
+	if strings.Contains(bestUrl, "/https://github.com/") {
+		mirrorPrefix = strings.Split(bestUrl, "https://github.com/")[0]
+	}
+	downloadUrl := mirrorPrefix + rawUrl
+
+	printInfo("正在下载 cloudflared 二进制文件，这可能需要一些时间...")
+	printInfo("下载地址: %s", downloadUrl)
+
+	err := downloadFile(downloadUrl, cfBinPath)
+	if err != nil {
+		printError("下载 cloudflared 二进制失败：%v", err)
+		return
+	}
+
+	if runtime.GOOS != "windows" {
+		if err := os.Chmod(cfBinPath, 0755); err != nil {
+			printError("设置 cloudflared 可执行权限失败：%v", err)
+			return
+		}
+	}
+	printSuccess("cloudflared 引擎下载安装成功！")
+}
+
+func downloadFile(url string, destPath string) error {
+	client := &http.Client{Timeout: 10 * time.Minute}
+	resp, err := client.Get(url)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("bad status: %s", resp.Status)
+	}
+
+	out, err := os.Create(destPath)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, resp.Body)
+	return err
+}
+
+func installTermuxPackage(name string) error {
+	if os.Getuid() == 0 {
+		return runCmd("", "apt-get", "install", "-y", name)
+	}
+	if err := runCmd("", "pkg", "install", "-y", name); err != nil {
+		return runCmd("", "apt-get", "install", "-y", name)
+	}
+	return nil
 }

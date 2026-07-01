@@ -88,7 +88,7 @@ describe('SystemManager', () => {
 
       const hasGit = SystemManager.hasBinary('git');
       expect(hasGit).toBe(true);
-      expect(vi.mocked(child_process.spawnSync)).toHaveBeenCalledWith('command', ['-v', 'git'], { stdio: 'ignore' });
+      expect(vi.mocked(child_process.spawnSync)).toHaveBeenCalledWith('sh', ['-c', 'command -v git'], { stdio: 'ignore' });
     });
 
     it('should return false if spawnSync throws or status is non-zero', () => {

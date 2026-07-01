@@ -3,11 +3,27 @@ export const fetcher = (url: string) => fetch(url).then(res => {
   return res.json();
 });
 
+const checkRes = async (res: Response) => {
+  if (!res.ok) {
+    let msg = 'API Error';
+    try {
+      const data = await res.json();
+      msg = data.error || msg;
+    } catch {
+      try {
+        msg = await res.text() || msg;
+      } catch {}
+    }
+    throw new Error(msg);
+  }
+  return res;
+};
+
 export const api = {
-  install: (id: string) => fetch(`/api/modules/${id}/install`, { method: 'POST' }),
-  start: (id: string) => fetch(`/api/modules/${id}/start`, { method: 'POST' }),
-  stop: (id: string) => fetch(`/api/modules/${id}/stop`, { method: 'POST' }),
-  uninstall: (id: string) => fetch(`/api/modules/${id}`, { method: 'DELETE' }),
+  install: (id: string) => fetch(`/api/modules/${id}/install`, { method: 'POST' }).then(checkRes),
+  start: (id: string) => fetch(`/api/modules/${id}/start`, { method: 'POST' }).then(checkRes),
+  stop: (id: string) => fetch(`/api/modules/${id}/stop`, { method: 'POST' }).then(checkRes),
+  uninstall: (id: string) => fetch(`/api/modules/${id}`, { method: 'DELETE' }).then(checkRes),
   getAutostart: () => fetch('/api/system/autostart').then(res => res.json()),
   setAutostart: (enabled: boolean) => fetch('/api/system/autostart', {
     method: 'POST',

@@ -25,6 +25,7 @@ export interface GlobalSettings {
   mirrorUrl?: string;
   adminPasswordHash?: string;
   gatewayCookieDomain?: string;
+  customIngress?: Array<{ hostname: string; targetUrl: string }>;
 }
 
 export type ModuleStatus = 'STOPPED' | 'RUNNING' | 'INSTALLING' | 'CRASHED' | 'ERROR';
@@ -56,6 +57,7 @@ const DEFAULT_SETTINGS: GlobalSettings = {
   autoStartModules: [],
   storeIndexUrl: 'https://raw.githubusercontent.com/Future-404/LexHub-store/main/index.json',
   networkStrategy: 'auto',
+  customIngress: [],
 };
 
 // ── Config Manager ─────────────────────────────────────────────────────────

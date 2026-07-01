@@ -1,0 +1,25 @@
+{
+  "id": "gcli2api",
+  "name": "GCLI2API",
+  "aliases": ["gcli"],
+  "version": "1.0.0",
+  "author": "su-kaka",
+  "description": "GCLI2API 用于将 GeminiCLI 和 Antigravity 转换为 OpenAI、GEMINI 和 Claude API 兼容接口，方便客户端接入使用。",
+  "icon": "🌐",
+  "categories": ["AI", "Proxy"],
+  "platforms": ["linux", "termux"],
+  "repo_url": "https://github.com/su-kaka/gcli2api.git",
+  "branch": "master",
+  "dependencies": {
+    "binaries": ["python3", "git"]
+  },
+  "env": {
+    "PORT": { "default": 7861, "description": "监听端口" },
+    "PASSWORD": { "default": "pwd", "description": "访问密钥 (Authorization 密码)" },
+    "HOST": { "default": "0.0.0.0", "description": "监听地址 (0.0.0.0=公网, 127.0.0.1=仅本机)" }
+  },
+  "port_mapping": {
+    "source": 7861,
+    "target": 7861
+  }
+}

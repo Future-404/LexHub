@@ -2,7 +2,7 @@ import useSWR from 'swr';
 import { useTranslation } from 'react-i18next';
 import { fetcher, api } from '../api/client';
 import { useState } from 'react';
-import { Network, Globe, RefreshCw, Zap, Shield, Archive, Loader2 } from 'lucide-react';
+import { Network, Globe, RefreshCw, Zap, Shield, Archive, Loader2, Key, Smartphone, Activity, RotateCcw } from 'lucide-react';
 import { useAppStore } from '../store';
 
 interface GlobalSettings {
@@ -48,8 +48,147 @@ export default function SettingsView() {
   const { data: autostartStatus, mutate: mutateAutostart } = useSWR<{enabled: boolean}>('/api/system/autostart', fetcher);
   const { data: modules } = useSWR<ModuleInfo[]>('/api/modules', fetcher);
   const { data: migrationData, mutate: mutateMigration } = useSWR<MigrationScanResult>('/api/system/migrate/scan', fetcher);
+  const { data: sysInfo } = useSWR<any>('/api/system/info', fetcher);
+  const { data: adbStatus, mutate: mutateAdbStatus } = useSWR<any>(
+    sysInfo?.platform === 'termux' || sysInfo?.platform === 'linux' ? '/api/system/adb/status' : null,
+    fetcher
+  );
+
   const [saving, setSaving] = useState(false);
   const [migratingId, setMigratingId] = useState<string | null>(null);
+  
+  const [adbHost, setAdbHost] = useState('127.0.0.1:5555');
+  const [pairingCode, setPairingCode] = useState('');
+  const [adbLoading, setAdbLoading] = useState(false);
+
+  const handleAdbInstall = async () => {
+    setAdbLoading(true);
+    try {
+      const res = await fetch('/api/system/adb/install', { method: 'POST' });
+      const data = await res.json();
+      if (res.ok) {
+        alert(data.message || '安装完成');
+        mutateAdbStatus();
+      } else {
+        alert('安装失败: ' + data.error);
+      }
+    } catch (err) {
+      alert('网络错误: ' + err);
+    } finally {
+      setAdbLoading(false);
+    }
+  };
+
+  const handleAdbPair = async () => {
+    if (!pairingCode) return alert('请输入配对码');
+    setAdbLoading(true);
+    try {
+      const res = await fetch('/api/system/adb/pair', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ host: adbHost, code: pairingCode })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert(data.message || '配对指令执行成功');
+        mutateAdbStatus();
+      } else {
+        alert('配对失败: ' + data.error);
+      }
+    } catch (err) {
+      alert('配对错误: ' + err);
+    } finally {
+      setAdbLoading(false);
+    }
+  };
+
+  const handleAdbConnect = async () => {
+    setAdbLoading(true);
+    try {
+      const res = await fetch('/api/system/adb/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ host: adbHost })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert(data.message || '连接成功');
+        mutateAdbStatus();
+      } else {
+        alert('连接失败: ' + data.error);
+      }
+    } catch (err) {
+      alert('连接错误: ' + err);
+    } finally {
+      setAdbLoading(false);
+    }
+  };
+
+  const handleAdbOptimize = async (mode: 'universal' | 'aggressive') => {
+    if (mode === 'aggressive' && !confirm('激进策略会冻结部分系统级功耗管理组件（可随时恢复）。有些设备可能会有充电或发热提示，是否确认继续？')) {
+      return;
+    }
+    setAdbLoading(true);
+    try {
+      const res = await fetch('/api/system/adb/optimize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert(data.message || '保活优化策略配置完成');
+        mutateAdbStatus();
+      } else {
+        alert('配置失败: ' + data.error);
+      }
+    } catch (err) {
+      alert('请求错误: ' + err);
+    } finally {
+      setAdbLoading(false);
+    }
+  };
+
+  const handleAdbHeartbeat = async (enable: boolean) => {
+    setAdbLoading(true);
+    try {
+      const res = await fetch('/api/system/adb/heartbeat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enable })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert(data.message || '操作成功');
+        mutateAdbStatus();
+      } else {
+        alert('操作失败: ' + data.error);
+      }
+    } catch (err) {
+      alert('请求错误: ' + err);
+    } finally {
+      setAdbLoading(false);
+    }
+  };
+
+  const handleAdbRollback = async () => {
+    if (!confirm('确定要恢复系统默认后台配置，撤销全部已应用优化吗？')) return;
+    setAdbLoading(true);
+    try {
+      const res = await fetch('/api/system/adb/rollback', { method: 'POST' });
+      const data = await res.json();
+      if (res.ok) {
+        alert(data.message || '所有优化参数已撤销还原');
+        mutateAdbStatus();
+      } else {
+        alert('撤销失败: ' + data.error);
+      }
+    } catch (err) {
+      alert('请求错误: ' + err);
+    } finally {
+      setAdbLoading(false);
+    }
+  };
 
   const toggleAutostart = async (currentVal: boolean) => {
     setSaving(true);
@@ -64,13 +203,22 @@ export default function SettingsView() {
     }
   };
 
-  const handleMirrorUpdate = async (action: string) => {
+  const handleMirrorUpdate = async (action: string, url?: string) => {
     setSaving(true);
     try {
-      const res = await api.setMirror(action);
-      alert(res.message);
+      const res = await fetch('/api/system/mirrors', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, url })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert(data.message || '操作成功');
+      } else {
+        alert('操作失败: ' + data.error);
+      }
     } catch (err) {
-      alert('操作失败: ' + String(err));
+      alert('网络错误: ' + err);
     } finally {
       setSaving(false);
     }
@@ -86,8 +234,8 @@ export default function SettingsView() {
       });
       await mutateSettings();
       if (key === 'language') {
-        setLanguage(value);
-        i18n.changeLanguage(value);
+        setLanguage(value as any);
+        i18n.changeLanguage(value as any);
       }
     } finally {
       setSaving(false);
@@ -206,39 +354,75 @@ export default function SettingsView() {
               </div>
             </div>
 
-            <div className="pt-4 border-t border-zinc-100 dark:border-zinc-800/50">
-              <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-3">
-                快捷优化 (Quick Optimizations)
+            <div className="pt-4 border-t border-zinc-100 dark:border-zinc-800/50 space-y-4">
+              <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                镜像源配置 (Mirror Settings)
               </label>
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  disabled={saving}
-                  onClick={() => handleMirrorUpdate('npm')}
-                  className="px-3 py-2 bg-zinc-50 dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 transition-colors"
-                >
-                  📦 更换 NPM 源
-                </button>
-                <button
-                  disabled={saving}
-                  onClick={() => handleMirrorUpdate('pip')}
-                  className="px-3 py-2 bg-zinc-50 dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 transition-colors"
-                >
-                  🐍 更换 PIP 源
-                </button>
-                <button
-                  disabled={saving}
-                  onClick={() => handleMirrorUpdate('system')}
-                  className="px-3 py-2 bg-zinc-50 dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 transition-colors"
-                >
-                  🐧 更换系统源
-                </button>
-                <button
-                  disabled={saving}
-                  onClick={() => handleMirrorUpdate('reset')}
-                  className="px-3 py-2 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40 text-red-600 dark:text-red-400 text-sm rounded-lg border border-red-100 dark:border-red-900/30 transition-colors"
-                >
-                  🔄 重置网络设置
-                </button>
+              
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-xs font-medium text-zinc-500 min-w-[70px]">📦 NPM 源</span>
+                  <select
+                    disabled={saving}
+                    onChange={(e) => handleMirrorUpdate('npm', e.target.value)}
+                    defaultValue=""
+                    className="flex-1 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-blue-500"
+                  >
+                    <option value="" disabled>选择镜像源...</option>
+                    <option value="https://registry.npmmirror.com">淘宝镜像 (npmmirror)</option>
+                    <option value="https://mirrors.aliyun.com/npm/">阿里云镜像</option>
+                    <option value="https://mirrors.cloud.tencent.com/npm/">腾讯云镜像</option>
+                    <option value="https://mirrors.huaweicloud.com/repository/npm/">华为云镜像</option>
+                    <option value="https://registry.npmjs.org">官方源 (npmjs.org)</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-xs font-medium text-zinc-500 min-w-[70px]">🐍 PIP 源</span>
+                  <select
+                    disabled={saving}
+                    onChange={(e) => handleMirrorUpdate('pip', e.target.value)}
+                    defaultValue=""
+                    className="flex-1 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-blue-500"
+                  >
+                    <option value="" disabled>选择镜像源...</option>
+                    <option value="https://pypi.tuna.tsinghua.edu.cn/simple">清华大学 (Tsinghua)</option>
+                    <option value="https://mirrors.aliyun.com/pypi/simple/">阿里云镜像</option>
+                    <option value="https://mirrors.cloud.tencent.com/pypi/simple/">腾讯云镜像</option>
+                    <option value="https://pypi.doubanio.com/simple/">豆瓣镜像</option>
+                    <option value="https://mirrors.huaweicloud.com/repository/pypi/simple/">华为云镜像</option>
+                    <option value="https://pypi.org/simple">官方源 (pypi.org)</option>
+                  </select>
+                </div>
+
+                {(sysInfo?.platform === 'termux' || sysInfo?.platform === 'linux') && (
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-xs font-medium text-zinc-500 min-w-[70px]">🐧 系统源</span>
+                    <select
+                      disabled={saving}
+                      onChange={(e) => handleMirrorUpdate('system', e.target.value)}
+                      defaultValue=""
+                      className="flex-1 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-blue-500"
+                    >
+                      <option value="" disabled>选择系统源...</option>
+                      <option value="tsinghua">清华大学 (Tsinghua)</option>
+                      <option value="aliyun">阿里云 (Aliyun)</option>
+                      <option value="bfsu">北京外国语大学 (BFSU)</option>
+                      <option value="ustc">中国科学技术大学 (USTC)</option>
+                      <option value="default">官方默认源 (Default)</option>
+                    </select>
+                  </div>
+                )}
+
+                <div className="pt-2">
+                  <button
+                    disabled={saving}
+                    onClick={() => handleMirrorUpdate('reset')}
+                    className="w-full py-1.5 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40 text-red-600 dark:text-red-400 text-xs font-medium rounded-lg border border-red-100 dark:border-red-900/30 transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    🔄 重置网络设置与代理
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -364,6 +548,152 @@ export default function SettingsView() {
                 </button>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Android Keepalive Settings */}
+      {(sysInfo?.platform === 'termux' || sysInfo?.platform === 'linux') && adbStatus && (
+        <div className="glass-panel p-6 rounded-2xl border border-zinc-200 dark:border-zinc-800/60 space-y-6 mt-6">
+          <div className="flex items-center space-x-3 mb-2">
+            <div className="p-2 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-lg">
+              <Smartphone className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-lg font-medium">Android 系统保活与优化 (Android Performance Guard)</h2>
+              <p className="text-xs text-zinc-500 mt-1">防止 Termux 及酒馆、网关进程在后台被安卓系统（尤其是 Phantom Process Killer）杀死。</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Connection Block */}
+            <div className="space-y-4 p-4 rounded-xl bg-zinc-50 dark:bg-zinc-900/40 border border-zinc-200/50 dark:border-zinc-800/50">
+              <h3 className="text-sm font-semibold flex items-center text-zinc-700 dark:text-zinc-300">
+                <Key className="w-4 h-4 mr-1.5 text-zinc-500" /> 第一步: ADB 连接与配对
+              </h3>
+
+              {!adbStatus.installed ? (
+                <div className="space-y-2">
+                  <p className="text-xs text-red-500">检测到未安装 ADB 工具包。请先点击安装。</p>
+                  <button
+                    disabled={adbLoading}
+                    onClick={handleAdbInstall}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg disabled:opacity-50 transition-colors flex items-center"
+                  >
+                    {adbLoading && <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />}
+                    一键安装 ADB
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="p-3 rounded-lg bg-zinc-100 dark:bg-zinc-800/60 text-xs text-zinc-500 space-y-1">
+                    <div>1. 开启手机【开发者选项】和【无线调试】</div>
+                    <div>2. 查看无线调试下的【IP 地址和端口】以及【配对码】</div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[11px] text-zinc-500 mb-1">IP 与端口 (IP:Port)</label>
+                      <input
+                        type="text"
+                        value={adbHost}
+                        onChange={(e) => setAdbHost(e.target.value)}
+                        placeholder="127.0.0.1:5555"
+                        className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-blue-500 font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-zinc-500 mb-1">配对码 (Pairing Code)</label>
+                      <input
+                        type="text"
+                        value={pairingCode}
+                        onChange={(e) => setPairingCode(e.target.value)}
+                        placeholder="6位配对码"
+                        className="w-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button
+                      disabled={adbLoading}
+                      onClick={handleAdbPair}
+                      className="flex-1 py-1.5 bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-xs font-semibold rounded-lg transition-colors"
+                    >
+                      配对设备 (Pair)
+                    </button>
+                    <button
+                      disabled={adbLoading}
+                      onClick={handleAdbConnect}
+                      className="flex-1 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition-colors"
+                    >
+                      连接设备 (Connect)
+                    </button>
+                  </div>
+
+                  <div className="pt-2 border-t border-zinc-200 dark:border-zinc-800 text-xs">
+                    <span>当前状态: </span>
+                    {adbStatus.connected ? (
+                      <span className="text-green-600 font-semibold">
+                        已连接 ({adbStatus.manufacturer || '未知设备'})
+                      </span>
+                    ) : (
+                      <span className="text-zinc-400">未连接</span>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Performance Settings Block */}
+            <div className="space-y-4 p-4 rounded-xl bg-zinc-50 dark:bg-zinc-900/40 border border-zinc-200/50 dark:border-zinc-800/50">
+              <h3 className="text-sm font-semibold flex items-center text-zinc-700 dark:text-zinc-300">
+                <Activity className="w-4 h-4 mr-1.5 text-zinc-500" /> 第二步: 优化与音频心跳
+              </h3>
+
+              <div className="space-y-3">
+                <div className="flex gap-2">
+                  <button
+                    disabled={adbLoading || !adbStatus.connected}
+                    onClick={() => handleAdbOptimize('universal')}
+                    className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-colors"
+                  >
+                    🛡️ 应用通用保活
+                  </button>
+                  <button
+                    disabled={adbLoading || !adbStatus.connected}
+                    onClick={() => handleAdbOptimize('aggressive')}
+                    className="flex-1 py-2 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-colors"
+                  >
+                    🔥 厂商激进优化
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between p-3 bg-white dark:bg-zinc-850 rounded-lg border border-zinc-100 dark:border-zinc-800">
+                  <div>
+                    <span className="block text-xs font-medium text-zinc-800 dark:text-zinc-200">静音音频心跳 (Audio Heartbeat)</span>
+                    <span className="block text-[10px] text-zinc-500 mt-0.5">利用系统媒体播放保护机制防止进程被休眠。</span>
+                  </div>
+                  <button
+                    disabled={adbLoading}
+                    onClick={() => handleAdbHeartbeat(!adbStatus.heartbeatRunning)}
+                    className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${adbStatus.heartbeatRunning ? 'bg-emerald-500' : 'bg-zinc-200 dark:bg-zinc-700'}`}
+                  >
+                    <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow transition duration-200 ease-in-out ${adbStatus.heartbeatRunning ? 'translate-x-4' : 'translate-x-0'}`} />
+                  </button>
+                </div>
+
+                <div className="flex gap-2 pt-2 border-t border-zinc-200 dark:border-zinc-800">
+                  <button
+                    disabled={adbLoading || !adbStatus.connected}
+                    onClick={handleAdbRollback}
+                    className="w-full py-1.5 bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-xs font-medium rounded-lg transition-colors flex items-center justify-center text-zinc-700 dark:text-zinc-300"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5 mr-1" /> 撤销所有系统优化
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

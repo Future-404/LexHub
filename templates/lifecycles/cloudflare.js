@@ -4,59 +4,30 @@ import { spawn } from 'child_process';
 import os from 'os';
 
 export async function install(ctx) {
-  const { paths, logger, network, execCmd } = ctx;
-  const binDir = path.join(paths.appDir, 'bin');
-  fs.mkdirSync(binDir, { recursive: true });
-
+  const { paths, logger, execCmd } = ctx;
   const platform = process.platform;
-  const arch = process.arch;
 
-  // Termux fallback
   if (platform === 'android' || process.env.PREFIX?.includes('com.termux')) {
-    logger.info('检测到 Termux 环境，正在通过 pkg 安装 cloudflared...');
-    await execCmd('pkg', ['install', 'cloudflared', '-y']);
-    logger.success('cloudflared (Termux) 安装完成。');
+    logger.info('正在检测 Termux 环境下的 cloudflared...');
+    try {
+      await execCmd('command', ['-v', 'cloudflared']);
+      logger.success('cloudflared (Termux) 依赖已就绪。');
+    } catch {
+      logger.info('正在通过 pkg 安装 cloudflared...');
+      await execCmd('pkg', ['install', 'cloudflared', '-y']);
+      logger.success('cloudflared (Termux) 安装完成。');
+    }
     return;
   }
 
-  // OS Binary detection
-  let dlPlatform = '';
-  let dlArch = '';
-  let ext = '';
+  const ext = platform === 'win32' ? '.exe' : '';
+  const binPath = path.join(paths.appDir, 'bin', `cloudflared${ext}`);
 
-  if (platform === 'win32') { 
-    dlPlatform = 'windows'; 
-    dlArch = arch === 'x64' ? 'amd64' : '386'; 
-    ext = '.exe'; 
-  } else if (platform === 'darwin') { 
-    dlPlatform = 'darwin'; 
-    dlArch = arch === 'x64' ? 'amd64' : 'arm64'; 
+  if (fs.existsSync(binPath)) {
+    logger.success('cloudflared 引擎依赖已就绪。');
   } else {
-    dlPlatform = 'linux';
-    if (arch === 'x64') dlArch = 'amd64';
-    else if (arch === 'arm64') dlArch = 'arm64';
-    else if (arch === 'arm') dlArch = 'arm';
-    else throw new Error(`不支持的架构: ${platform}-${arch}`);
+    throw new Error('未检测到 cloudflared 引擎依赖，请使用 Go 引导程序重新安装或配置系统依赖。');
   }
-
-  const filename = `cloudflared-${dlPlatform}-${dlArch}${ext}`;
-  const binName = `cloudflared${ext}`;
-  const dest = path.join(binDir, binName);
-
-  const url = `https://github.com/cloudflare/cloudflared/releases/latest/download/${filename}`;
-  const finalUrl = network.getSmartUrl(url);
-
-  logger.info(`正在下载 cloudflared 二进制文件 (${filename})...`);
-  
-  const fetch = (await import('node-fetch')).default || global.fetch;
-  const res = await fetch(finalUrl);
-  if (!res.ok) throw new Error(`下载失败: ${res.status} ${res.statusText}`);
-  
-  const buffer = await res.arrayBuffer();
-  fs.writeFileSync(dest, Buffer.from(buffer));
-  fs.chmodSync(dest, 0o755);
-  
-  logger.success('cloudflared 二进制下载完成。');
 }
 
 function getCloudflaredPath(ctx) {
@@ -108,7 +79,18 @@ export async function login(ctx) {
 export async function checkCert(ctx) {
   const certPath = path.join(ctx.paths.appDir, 'data', 'cert.pem');
   const exists = fs.existsSync(certPath);
-  return { ok: true, exists };
+  
+  const platform = process.platform;
+  let binExists = false;
+  if (platform === 'android' || process.env.PREFIX?.includes('com.termux')) {
+    binExists = true;
+  } else {
+    const ext = platform === 'win32' ? '.exe' : '';
+    const binPath = path.join(ctx.paths.appDir, 'bin', `cloudflared${ext}`);
+    binExists = fs.existsSync(binPath);
+  }
+
+  return { ok: true, exists, binExists };
 }
 
 export async function scanDownloadsForCert(ctx) {
