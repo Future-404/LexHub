@@ -172,8 +172,8 @@ function AppConfigPanel({ moduleId }: { moduleId: string }) {
       const keys = key.split('.');
       let cur: Record<string, unknown> = next;
       for (let i = 0; i < keys.length - 1; i++) {
-        cur[keys[i]] = cur[keys[i]] ? { ...cur[keys[i]] } : {};
-        cur = cur[keys[i]];
+        cur[keys[i]] = cur[keys[i]] ? { ...(cur[keys[i]] as Record<string, any>) } : {};
+        cur = cur[keys[i]] as Record<string, any>;
       }
       cur[keys[keys.length - 1]] = value;
       return next;
@@ -199,7 +199,7 @@ function AppConfigPanel({ moduleId }: { moduleId: string }) {
       });
       if (!r.ok) throw new Error(await r.text());
       setMsg({ type: 'ok', text: '配置已保存！重启服务后生效。' });
-    } catch (e: unknown) {
+    } catch (e: any) {
       setMsg({ type: 'err', text: e.message });
     } finally {
       setSaving(false);
@@ -756,7 +756,7 @@ function PasswordPanel({ moduleId }: { moduleId: string }) {
       if (!r.ok) throw new Error(await r.text());
       setMsg({ type: 'ok', text: '密码已重置！' });
       setPassword('');
-    } catch (e: unknown) {
+    } catch (e: any) {
       setMsg({ type: 'err', text: e.message });
     } finally {
       setBusy(false);

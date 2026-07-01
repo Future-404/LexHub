@@ -1,4 +1,4 @@
-import React from 'react';
+
 import CloudflarePanel from './CloudflarePanel';
 
 export default function CloudflareView() {

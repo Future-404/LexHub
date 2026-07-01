@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { AlertTriangle, Loader2 } from 'lucide-react';
-import { cn } from '../lib/utils';
 
 interface DangerModalProps {
   isOpen: boolean;
