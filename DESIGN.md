@@ -2,6 +2,14 @@
 
 本文档定义了 **LexHub** 的具体实现细节，包括模块元数据规范、生命周期 JavaScript API、HTTP/WebSocket 接口规范、跨平台兼容性策略以及日志与异常反馈子系统。
 
+## 目录
+- [1. 项目目录结构规划](#-1-项目目录结构规划)
+- [2. 日志与异常反馈系统设计](#-2-日志与异常反馈系统设计-logging--diagnostics)
+- [3. 跨平台兼容性设计](#-3-跨平台兼容性设计-windows-termux-debianubuntu)
+- [4. 模块元数据规范](#-4-模块元数据规范-lexhub-modulejson)
+- [5. 模块生命周期钩子 API](#️-5-模块生命周期钩子-api-lifecyclejs)
+- [6. 后端 API 设计](#-6-后端-api-设计-http--websocket)
+
 ---
 
 ## 📂 1. 项目目录结构规划

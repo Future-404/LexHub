@@ -38,6 +38,21 @@ curl -s -L https://lexhub-installer.future404.workers.dev | bash
 
 ---
 
+## 目录
+- [简介](#-简介)
+- [核心特性](#-核心特性)
+- [快速开始](#-快速开始)
+- [模块商店](#-模块商店)
+- [CLI 命令参考](#-cli-命令参考)
+- [项目架构](#-项目架构)
+- [Web UI & API](#-web-ui--api)
+- [平台支持](#-平台支持)
+- [开发者指南](#-开发者指南)
+- [文档目录](#-文档目录)
+- [贡献指南](#-贡献指南)
+
+---
+
 ## ✨ 核心特性
 
 | 特性 | 说明 |
@@ -309,12 +324,40 @@ module.exports = {
 
 ## 📁 文档目录
 
-```
-docs/
-├── architecture/   # 系统架构设计文档
-├── guide/          # 用户使用指南
-└── modules/        # 各模块专属文档
-```
+> 快速跳转到项目各部分文档（点击标题即可跳转）
+
+### 📖 核心文档
+- [README（本文件）](#-lexhub) — 项目总览、快速开始、CLI 命令
+- [CHANGELOG.md](CHANGELOG.md) — 版本历史与更新日志
+- [DESIGN.md](DESIGN.md) — 详细设计规格书（架构、日志、模块规范）
+
+### 🏗️ 架构与决策
+- [架构决策记录 (ADR)](docs/architecture/decisions/)  
+  - [ADR-0001: 核心架构设计](docs/architecture/decisions/0001-lexhub-architecture-design.md)
+  - [ADR-0002: ADB 保活架构](docs/architecture/decisions/0002-adb-keepalive-architecture.md)
+
+### 🔧 开发者文档
+- [docs/dev/module-spec.md](docs/dev/module-spec.md) — 模块开发规范
+- [docs/dev/lifecycle-api.md](docs/dev/lifecycle-api.md) — 生命周期钩子 API 详解
+
+### 📘 用户指南
+- [快速开始](docs/guide/quickstart.md)
+- [安装指南](docs/guide/installation.md)
+- [CLI 命令参考](docs/guide/cli.md)
+- [网络与穿透](docs/guide/network.md)
+
+### 📦 模块文档
+- [SillyTavern](docs/modules/sillytavern.md)
+- [ClewdR / clewd](docs/modules/clewd.md)
+- [CLIProxyAPI](docs/modules/cliproxyapi.md)
+- [GCLI2API](docs/modules/gcli2api.md)
+- [Cloudflare Zero Trust](docs/modules/cloudflare.md)
+- [模块文档模板](docs/modules/_template.md)
+
+---
+
+**提示**：在 GitHub 上点击上方链接会自动跳转对应文件/标题。你也可以在侧边栏「文档」中直接浏览整个 `docs/` 文件夹。
+
 
 ---
 

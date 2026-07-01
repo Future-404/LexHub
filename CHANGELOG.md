@@ -2,6 +2,11 @@
 
 所有值得关注的改动都将记录于此文档。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/)，版本控制遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## 目录
+- [未发布](#未发布)
+- [v2.0.0 (2026-06-30)](#200--2026-06-30)
+- [v1.x (TAV-X 时代)](#1x--tav-x-时代已归档)
+
 ---
 
 ## [未发布]
