@@ -3,6 +3,13 @@ node_modules/
 dist/
 *.log
 
+# Runtime files (generated at startup, never commit)
+server.pid
+cookie.txt
+
+# Local dev symlink (points to absolute path, meaningless on other machines)
+store
+
 # Config (user-specific)
 config/settings.json
 config/installed.json
@@ -14,6 +21,14 @@ web-ui/dist/
 # OS
 .DS_Store
 Thumbs.db
+
+# Vite scaffold default assets (unused)
+web-ui/src/assets/react.svg
+web-ui/src/assets/vite.svg
+
+# AI agent work logs (internal, not for repo consumers)
+.agents/*.md
+!.agents/PROJECT.md
 
 # IDE
 .vscode/
