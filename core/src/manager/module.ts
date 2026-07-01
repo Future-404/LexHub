@@ -524,7 +524,7 @@ export class ModuleManager {
       paths: {
         moduleDir,
         appDir,
-        logsDir: path.join(require('path').resolve(__dirname, '../../..'), 'logs'),
+        logsDir: path.join(ROOT_DIR, 'logs'),
       },
       logger: {
         info: (msg: string) => Logger.info(msg, meta.id),
