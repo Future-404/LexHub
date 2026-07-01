@@ -48,6 +48,30 @@ jobs:
           cd build
           sha256sum * > sha256sums.txt
 
+          # Generate version.json
+          VERSION=${GITHUB_REF_NAME#v}
+          DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          
+          echo "{" > version.json
+          echo "  \"version\": \"$VERSION\"," >> version.json
+          echo "  \"release_date\": \"$DATE\"," >> version.json
+          echo "  \"changelog\": \"https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md\"," >> version.json
+          echo "  \"checksums\": {" >> version.json
+          
+          first=true
+          while read -r hash file; do
+            if [ "$first" = true ]; then
+              first=false
+            else
+              echo "," >> version.json
+            fi
+            echo "    \"$file\": \"$hash\"" | tr -d '\n' >> version.json
+          done < sha256sums.txt
+          
+          echo "" >> version.json
+          echo "  }" >> version.json
+          echo "}" >> version.json
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -60,6 +84,7 @@ jobs:
             build/lh-windows-amd64.exe
             build/lh-windows-386.exe
             build/sha256sums.txt
+            build/version.json
           draft: false
           prerelease: false
         env:

@@ -42,4 +42,5 @@ export const api = {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(args)
   }).then(res => res.json()),
+  getUpdateStatus: () => fetch('/api/system/update').then(checkRes).then(res => res.json()),
 };

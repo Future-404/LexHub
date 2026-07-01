@@ -168,6 +168,35 @@ export async function registerRoutes(fastify: FastifyInstance): Promise<void> {
     return reply.send(SystemManager.getSystemMetrics());
   });
 
+  fastify.get('/api/system/update', async (_req, reply) => {
+    let currentVersion = '2.0.0';
+    try {
+      const pkgPath = path.resolve(__dirname, '../../package.json');
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+      currentVersion = pkg.version || '2.0.0';
+    } catch (e) {
+      // fallback to default
+    }
+
+    try {
+      const response = await fetch('https://lex.rka.qzz.io/version.json');
+      const data = await response.json();
+      return reply.send({
+        current: currentVersion,
+        latest: data.version,
+        hasUpdate: data.version !== currentVersion,
+        releaseDate: data.release_date,
+        changelog: data.changelog
+      });
+    } catch (e) {
+      return reply.send({
+        current: currentVersion,
+        latest: currentVersion,
+        hasUpdate: false
+      });
+    }
+  });
+
   fastify.get('/api/system/migrate/scan', async (_req, reply) => {
     try {
       const res = MigrateManager.scan();

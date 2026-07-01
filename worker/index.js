@@ -4,8 +4,8 @@ export default {
     const path = url.pathname.slice(1); // remove leading slash
     const userAgent = request.headers.get('User-Agent') || '';
     
-    // 1. If path is a specific binary name, serve it directly from R2 bucket
-    if (path.startsWith('lh-') || path === 'sha256sums.txt' || path.endsWith('.sha256')) {
+    // 1. If path is a specific binary name or metadata, serve it directly from R2 bucket
+    if (path.startsWith('lh-') || path === 'sha256sums.txt' || path === 'version.json' || path.endsWith('.sha256')) {
       try {
         const object = await env.LAUNCHER_BUCKET.get(path);
         if (object === null) {
@@ -17,6 +17,9 @@ export default {
         headers.set('etag', object.httpEtag);
         if (path.endsWith('.txt') || path.endsWith('.sha256')) {
           headers.set('content-type', 'text/plain;charset=UTF-8');
+          headers.set('content-disposition', 'inline');
+        } else if (path.endsWith('.json')) {
+          headers.set('content-type', 'application/json;charset=UTF-8');
           headers.set('content-disposition', 'inline');
         } else {
           headers.set('content-type', 'application/octet-stream');

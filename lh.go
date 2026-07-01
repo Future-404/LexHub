@@ -2,6 +2,9 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,8 +18,9 @@ import (
 )
 
 const (
-	colorReset  = "\033[0m"
-	colorRed    = "\033[1;31m"
+	CurrentVersion = "2.0.0"
+	colorReset     = "\033[0m"
+	colorRed       = "\033[1;31m"
 	colorGreen  = "\033[1;32m"
 	colorYellow = "\033[1;33m"
 	colorCyan   = "\033[1;36m"
@@ -930,6 +934,10 @@ func main() {
 		if len(os.Args) > 2 {
 			forwardCommand(lexHubDir, os.Args[1:])
 		} else {
+			if checkAndUpdateLauncher(lexHubDir) {
+				printSuccess("核心引擎已更新，请重新运行 `lh update` 以继续更新模块...")
+				os.Exit(0)
+			}
 			installOrUpdate(lexHubDir, true)
 		}
 	case "enable":
@@ -1074,4 +1082,164 @@ func installTermuxPackage(name string) error {
 		return runCmd("", "apt-get", "install", "-y", name)
 	}
 	return nil
+}
+
+type UpdateInfo struct {
+	Version      string            `json:"version"`
+	ReleaseDate  string            `json:"release_date"`
+	Changelog    string            `json:"changelog"`
+	Checksums    map[string]string `json:"checksums"`
+}
+
+func getUpdateInfo() (*UpdateInfo, error) {
+	urls := []string{
+		"https://lex.rka.qzz.io/version.json",
+		"https://mirror.ghproxy.com/https://github.com/Future-404/LexHub/releases/latest/download/version.json",
+		"https://github.com/Future-404/LexHub/releases/latest/download/version.json",
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	ch := make(chan *UpdateInfo, len(urls))
+
+	for _, u := range urls {
+		go func(url string) {
+			req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+			if err != nil {
+				return
+			}
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				return
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode == 200 {
+				var info UpdateInfo
+				if err := json.NewDecoder(resp.Body).Decode(&info); err == nil && info.Version != "" {
+					ch <- &info
+				}
+			}
+		}(u)
+	}
+
+	select {
+	case info := <-ch:
+		return info, nil
+	case <-ctx.Done():
+		return nil, fmt.Errorf("所有更新通道检测超时或失败")
+	}
+}
+
+func checkAndUpdateLauncher(lexHubDir string) bool {
+	printInfo("正在检查核心引擎更新...")
+	info, err := getUpdateInfo()
+	if err != nil {
+		printWarn("无法获取最新版本信息: %v，将跳过核心引擎更新", err)
+		return false
+	}
+
+	if info.Version == CurrentVersion {
+		printSuccess("当前核心引擎 (v%s) 已是最新版", CurrentVersion)
+		return false
+	}
+
+	printInfo("发现新版本核心引擎: v%s (发布于 %s)", info.Version, info.ReleaseDate)
+
+	osName := runtime.GOOS
+	arch := runtime.GOARCH
+	if osName == "linux" && isTermux() {
+		osName = "android"
+	}
+	binName := fmt.Sprintf("lh-%s-%s", osName, arch)
+	if osName == "windows" {
+		binName += ".exe"
+	}
+
+	expectedHash, ok := info.Checksums["build/"+binName]
+	if !ok {
+		expectedHash, ok = info.Checksums[binName]
+		if !ok {
+			printError("未找到适合当前架构 (%s) 的新版本二进制更新", binName)
+			return false
+		}
+	}
+
+	downloadUrl := fmt.Sprintf("https://lex.rka.qzz.io/%s", binName)
+	printInfo("正在下载最新版二进制: %s", downloadUrl)
+
+	tmpFile := filepath.Join(lexHubDir, binName+".tmp")
+	err = downloadFile(tmpFile, downloadUrl)
+	if err != nil {
+		printError("下载失败: %v", err)
+		return false
+	}
+	defer os.Remove(tmpFile)
+
+	hasher := sha256.New()
+	f, err := os.Open(tmpFile)
+	if err != nil {
+		printError("读取下载文件失败: %v", err)
+		return false
+	}
+	if _, err := io.Copy(hasher, f); err != nil {
+		f.Close()
+		printError("计算文件哈希失败: %v", err)
+		return false
+	}
+	f.Close()
+	actualHash := hex.EncodeToString(hasher.Sum(nil))
+
+	if actualHash != expectedHash {
+		printError("文件哈希校验失败!\n预期: %s\n实际: %s", expectedHash, actualHash)
+		return false
+	}
+	printSuccess("文件哈希校验通过")
+
+	if runtime.GOOS != "windows" {
+		if err := os.Chmod(tmpFile, 0755); err != nil {
+			printWarn("设置执行权限失败: %v", err)
+		}
+	}
+
+	executablePath, err := os.Executable()
+	if err != nil {
+		printError("无法获取当前执行文件路径: %v", err)
+		return false
+	}
+
+	if runtime.GOOS == "windows" {
+		batPath := filepath.Join(lexHubDir, "update_lh.bat")
+		batContent := fmt.Sprintf(`@echo off
+timeout /t 2 /nobreak > nul
+move /y "%s" "%s"
+echo 更新完成！请重新运行 lh update
+pause
+del "%%~f0"
+`, tmpFile, executablePath)
+		if err := os.WriteFile(batPath, []byte(batContent), 0644); err != nil {
+			printError("创建更新脚本失败: %v", err)
+			return false
+		}
+		cmd := exec.Command("cmd.exe", "/c", "start", `""`, batPath)
+		if err := cmd.Start(); err != nil {
+			printError("执行更新脚本失败: %v", err)
+			return false
+		}
+		return true
+	} else {
+		backupFile := executablePath + ".bak"
+		os.Remove(backupFile)
+		if err := os.Rename(executablePath, backupFile); err != nil {
+			printError("备份原文件失败: %v", err)
+			return false
+		}
+		if err := os.Rename(tmpFile, executablePath); err != nil {
+			printError("替换新文件失败: %v", err)
+			os.Rename(backupFile, executablePath)
+			return false
+		}
+		os.Remove(backupFile)
+		return true
+	}
 }

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Routes, Route, NavLink } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { LayoutDashboard, Package, Settings, Moon, Sun, Languages, Menu, X, TerminalSquare, Cloud } from 'lucide-react';
@@ -8,6 +8,9 @@ import Dashboard from './components/Dashboard';
 import Modules from './components/Modules';
 import LogViewer from './components/LogViewer';
 import CloudflareView from './components/CloudflareView';
+import { api } from './api/client';
+import SettingsView from './components/Settings';
+import AuthScreen from './components/AuthScreen';
 
 // ── Layout Component ────────────────────────────────────────────────────────
 
@@ -16,6 +19,11 @@ function Layout({ children }: { children: React.ReactNode }) {
   const { theme, toggleTheme, language, setLanguage } = useAppStore();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showSystemLogs, setShowSystemLogs] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<{hasUpdate: boolean, current: string, latest: string, changelog: string} | null>(null);
+
+  useEffect(() => {
+    api.getUpdateStatus().then(data => setUpdateInfo(data)).catch(() => {});
+  }, []);
 
   const toggleLang = () => {
     if (language === 'zh') setLanguage('zh-TW');
@@ -77,30 +85,50 @@ function Layout({ children }: { children: React.ReactNode }) {
           </NavLink>
           
           <button 
-            onClick={() => { setShowSystemLogs(true); setSidebarOpen(false); }} 
-            className="w-full flex items-center px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 hover:bg-zinc-50 dark:hover:bg-zinc-800/30"
+            onClick={() => setShowSystemLogs(true)}
+            className="flex items-center px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 hover:bg-zinc-50 dark:hover:bg-zinc-800/30 w-full"
           >
-            <TerminalSquare className="w-4 h-4 mr-3" />
+            <TerminalSquare className="w-4 h-4 mr-3 opacity-70" />
             {t('dashboard.systemLogs', '系统日志')}
           </button>
         </nav>
 
-        <div className="p-4 border-t border-zinc-200 dark:border-zinc-800/60 flex items-center justify-between">
-          <button 
-            onClick={toggleTheme} 
-            aria-label={t('common.settings')}
-            className="p-2 rounded-xl text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800/50 transition-colors"
-          >
-            {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-          </button>
-          <button 
-            onClick={toggleLang} 
-            aria-label={t('common.settings')}
-            className="p-2 rounded-xl text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800/50 transition-colors flex items-center text-xs font-medium uppercase"
-          >
-            <Languages className="w-4 h-4 mr-1.5" />
-            {language}
-          </button>
+        <div className="p-4 mt-auto border-t border-zinc-200 dark:border-zinc-800/60">
+          <div className="flex flex-col space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-zinc-500 font-mono">v{updateInfo?.current || '2.0.0'}</span>
+              {updateInfo?.hasUpdate && (
+                <button 
+                  onClick={() => {
+                    const msg = `发现新版本 v${updateInfo.latest}\n\n请在你的终端（如 Termux）中运行命令进行自动升级：\n  lh update\n\n点击「确定」前往浏览器查看详细更新日志。`;
+                    if (window.confirm(msg)) {
+                      window.open(updateInfo.changelog || 'https://github.com/Future-404/LexHub/releases', '_blank');
+                    }
+                  }}
+                  className="flex items-center text-[10px] font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 px-2 py-0.5 rounded-full transition-colors hover:bg-amber-200 dark:hover:bg-amber-900/50"
+                >
+                  <div className="w-1.5 h-1.5 rounded-full bg-amber-500 mr-1.5 animate-pulse" />
+                  发现新版
+                </button>
+              )}
+            </div>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={toggleTheme}
+                className="p-2 rounded-lg text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800/60 transition-colors"
+                title={t('theme.toggle')}
+              >
+                {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+              </button>
+              <button
+                onClick={toggleLang}
+                className="p-2 rounded-lg text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800/60 transition-colors"
+                title={t('language.toggle')}
+              >
+                <Languages className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
         </div>
       </aside>
 
@@ -132,8 +160,6 @@ function Layout({ children }: { children: React.ReactNode }) {
   );
 }
 
-import SettingsView from './components/Settings';
-
 function NotFound() {
   const { t } = useTranslation();
   return (
@@ -145,8 +171,6 @@ function NotFound() {
 }
 
 // ── App Router ──────────────────────────────────────────────────────────────
-
-import AuthScreen from './components/AuthScreen';
 
 export default function App() {
   const [authenticated, setAuthenticated] = useState(false);

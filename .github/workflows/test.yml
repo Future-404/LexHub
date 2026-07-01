@@ -1,0 +1,60 @@
+name: Run Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    name: Test Core Engine
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: 'npm'
+          cache-dependency-path: core/package-lock.json
+          
+      - name: Install Dependencies
+        run: |
+          cd core
+          npm ci || npm install
+          
+      - name: Run Vitest
+        run: |
+          cd core
+          npm run test
+          
+      - name: Run Typecheck
+        run: |
+          cd core
+          npm run typecheck
+
+      - name: Build Web UI
+        run: |
+          cd web-ui
+          npm ci || npm install
+          npm run build
+
+  test-go:
+    name: Test Go Launcher
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          
+      - name: Build Go Launcher
+        run: go build -o lh .

@@ -12,6 +12,8 @@
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "lint:deps": "madge --circular --extensions ts --ts-config tsconfig.json src/"
   },
   "dependencies": {
@@ -29,6 +31,7 @@
   "devDependencies": {
     "@types/node": "^20.14.9",
     "@types/ws": "^8.5.10",
+    "@vitest/coverage-v8": "^4.1.9",
     "madge": "^8.0.0",
     "tsx": "^4.16.0",
     "typescript": "^5.5.2",
